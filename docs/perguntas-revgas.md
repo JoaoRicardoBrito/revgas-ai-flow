@@ -68,17 +68,19 @@ Equipe RevGás AI Flow, iCEV
 
 Preencher conforme chegarem. Registrar só a decisão, não a documentação interna.
 
+Respostas parciais vieram da [documentação pública](revgas-api.md) em 2026-11-27. As perguntas continuam valendo onde a documentação é omissa.
+
 | # | Resposta (resumo) | Data | Decisão / mudança no PRD ou ADR |
 |---|-------------------|------|----------------------------------|
-| 1 | | | |
-| 2 | | | |
-| 3 | | | |
-| 4 | | | |
-| 5 | | | |
+| 1 | Parcial (docs): existem `PUT /sales/{id}` e `PUT /sales/{id}/cancel` com motivo. Estados permitidos não documentados; há um prazo de cancelamento (`allow_cancel_sale`) | 2026-11-27 | Fake permite alterar em OPEN/ACTIVE/WARNING e cancelar fora de CHECK/CANCEL. **Perguntar o prazo** |
+| 2 | Parcial (docs): produto não tem preço; a venda recebe `value` por item | 2026-11-27 | **Perguntar** de onde a revenda tira o preço. Afeta a #9 |
+| 3 | Parcial (docs): "Avisar" = `PUT /sales/{id}/warning` (status WARNING), "Confirmar" = `/confirm` (CONFIRM). O efeito não está descrito | 2026-11-27 | Não chamamos nenhum dos dois; a venda conta como criada no `POST` |
+| 4 | Parcial (docs): não há geração de Pix nem conciliação; `PIX` é só forma de pagamento | 2026-11-27 | Mantém Pix na entrega / fictício |
+| 5 | Parcial (docs): `stock_quantity` por produto. Recusa sem estoque não documentada | 2026-11-27 | Fake recusa com 422; configurável |
 | 6 | | | |
 | 7 | | | |
-| 8 | | | |
+| 8 | Parcial (docs): existe homologação, mas marcada como "Não utilizar" | 2026-11-27 | **Perguntar** se podemos usar; até lá, só mock |
 | 9 | | | |
 | 10 | | | |
-| 11 | | | |
-| 12 | | | |
+| 11 | Sim (docs): `POST /customers`; nenhum campo marcado como obrigatório | 2026-11-27 | Enviamos `name`, `type: PHYSICAL`, `phones` e endereço |
+| 12 | Sim (docs): `GET /sales?customer_id=`, mais recente primeiro, janela máxima de 366 dias | 2026-11-27 | `findLastSale` usa os últimos 365 dias |

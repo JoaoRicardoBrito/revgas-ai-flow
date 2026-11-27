@@ -16,6 +16,8 @@ export const envSchema = z
     REVGAS_API_BASE_URL: z.url().default('https://api.revgas.com/v1'),
     REVGAS_API_KEY: z.string().optional(),
     REVGAS_USE_MOCK: z.stringbool().default(true),
+    /** Revenda (estabelecimento) usada em produtos, pagamentos e vendas. */
+    REVGAS_ESTABLISHMENT_ID: z.coerce.number().int().positive().optional(),
 
     GROQ_API_KEY: z.string().optional(),
     GROQ_MODEL: z.string().optional(),
@@ -35,6 +37,14 @@ export const envSchema = z
           code: 'custom',
           path: ['REVGAS_API_KEY'],
           message: 'obrigatória quando REVGAS_USE_MOCK=false',
+        });
+      }
+      // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare
+      if (env.REVGAS_USE_MOCK === false && !env.REVGAS_ESTABLISHMENT_ID) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['REVGAS_ESTABLISHMENT_ID'],
+          message: 'obrigatório quando REVGAS_USE_MOCK=false',
         });
       }
 

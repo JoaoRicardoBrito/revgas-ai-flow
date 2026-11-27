@@ -22,15 +22,16 @@ describe('validateEnv', () => {
       PORT: '8080',
       REVGAS_USE_MOCK: 'false',
       REVGAS_API_KEY: 'chave',
+      REVGAS_ESTABLISHMENT_ID: '7',
     });
 
     expect(env.PORT).toBe(8080);
     expect(env.REVGAS_USE_MOCK).toBe(false);
   });
 
-  it('exige REVGAS_API_KEY fora do modo mock', () => {
+  it('exige chave e estabelecimento fora do modo mock', () => {
     expect(() => validateEnv({ REVGAS_USE_MOCK: 'false' })).toThrow(
-      /REVGAS_API_KEY/,
+      /REVGAS_API_KEY[\s\S]*REVGAS_ESTABLISHMENT_ID/,
     );
   });
 
