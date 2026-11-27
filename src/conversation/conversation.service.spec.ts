@@ -12,7 +12,7 @@ import {
   connectDatabase,
   type DatabaseConnection,
 } from '../database/database.js';
-import { conversations } from '../database/schema.js';
+import { conversations, messages } from '../database/schema.js';
 import type { Extraction } from '../llm/extraction.schema.js';
 import {
   LlmError,
@@ -32,11 +32,14 @@ import { fakeRevgas, fullAddress, NO_DATA } from './testing.js';
 class LookupLlm implements LlmClient {
   readonly provider = 'lookup';
   calls = 0;
+  /** Tudo o que foi enviado ao LLM. */
+  readonly sent: string[] = [];
 
   constructor(private readonly answers: Record<string, Partial<Extraction>>) {}
 
   completeJson(request: JsonCompletionRequest): Promise<JsonCompletion> {
     this.calls++;
+    this.sent.push(request.system, request.user);
     const text =
       /<mensagem>\n([\s\S]*)\n<\/mensagem>/.exec(request.user)?.[1] ?? '';
     const answer = this.answers[text];
@@ -68,9 +71,16 @@ beforeEach(async () => {
   await connection.db.delete(conversations);
 });
 
-function setup() {
+function setup(options: { cpfRequired?: boolean } = {}) {
   const { fake, revgas } = fakeRevgas();
   const llm = new LookupLlm({
+    'quero um P13 na rua nova 45, fátima, no pix, sou Ana Teste': {
+      productSizeKg: 13,
+      address: fullAddress,
+      paymentMethod: 'pix',
+      customerName: 'Ana Teste',
+    },
+    'quero um P13, cpf [cpf]': { productSizeKg: 13 },
     'o mesmo de sempre': { intent: 'repeat_last' },
     'quero um P13 na rua nova 45, fátima, no pix': {
       productSizeKg: 13,
@@ -84,7 +94,7 @@ function setup() {
     store,
     new MessageExtractor(llm),
     revgas,
-    { ttlMs: TTL_MS },
+    { ttlMs: TTL_MS, cpfRequired: options.cpfRequired ?? false },
   );
   let seq = 0;
   const send = (
@@ -307,5 +317,69 @@ describe('ConversationService', () => {
     }
 
     expect(writes.join('')).not.toMatch(/Rua Nova|Fátima|5586900001111/);
+  });
+});
+
+async function bodies(): Promise<string[]> {
+  const rows = await connection.db
+    .select({ body: messages.body })
+    .from(messages);
+  return rows.map((r) => r.body);
+}
+
+describe('ConversationService: CPF (issue #8)', () => {
+  const CPF = '529.982.247-25'; // fictício
+  const order = 'quero um P13 na rua nova 45, fátima, no pix, sou Ana Teste';
+
+  it('a resposta ao pedido de CPF não passa pelo LLM', async () => {
+    const { send, llm, fake } = setup({ cpfRequired: true });
+    const phone = '5586944443333';
+    const ask = await send(phone, { text: order }, at(0)).result;
+    expect(ask.replies[0]?.text).toMatch(/CPF/);
+    const callsBefore = llm.calls;
+
+    const summary = await send(phone, { text: CPF }, at(10)).result;
+    expect(summary.step).toBe('confirming');
+    expect(llm.calls).toBe(callsBefore);
+
+    await send(phone, { buttonId: 'confirm' }, at(20)).result;
+    expect(fake.customers.at(-1)?.cpf).toBe('52998224725');
+    expect(llm.sent.join('\n')).not.toMatch(/529\.?982\.?247-?25/);
+  });
+
+  it('CPF no meio de outra mensagem é trocado por [cpf] antes do LLM', async () => {
+    const { send, llm } = setup();
+
+    await send('5586944442222', { text: `quero um P13, cpf ${CPF}` }, at(0))
+      .result;
+
+    expect(llm.sent.join('\n')).toContain('quero um P13, cpf [cpf]');
+    expect(llm.sent.join('\n')).not.toMatch(/529\.?982\.?247-?25/);
+  });
+
+  it('a mensagem gravada no banco tem o CPF mascarado', async () => {
+    const { send } = setup({ cpfRequired: true });
+    const phone = '5586944441111';
+    await send(phone, { text: order }, at(0)).result;
+
+    await send(phone, { text: `meu cpf é ${CPF}` }, at(10)).result;
+
+    const stored = await bodies();
+    expect(stored).toContain('meu cpf é ***.***.***-25');
+    expect(stored.join('\n')).not.toMatch(/529\.?982\.?247-?25/);
+  });
+
+  it('o rascunho gravado não guarda o CPF depois do cadastro', async () => {
+    const { send } = setup({ cpfRequired: true });
+    const phone = '5586944440000';
+    await send(phone, { text: order }, at(0)).result;
+    await send(phone, { text: CPF }, at(10)).result;
+
+    const done = await send(phone, { buttonId: 'confirm' }, at(20)).result;
+
+    const conversation = await store.getConversation(done.conversationId);
+    expect(JSON.stringify(conversation?.collected)).not.toContain(
+      '52998224725',
+    );
   });
 });

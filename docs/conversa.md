@@ -35,6 +35,13 @@ A tabela fica em [`transitions.ts`](../src/conversation/transitions.ts). Qualque
 | `dispatched` | idem | Cancelar ou reclamar vai para o atendente |
 | `closed` | idem | Final |
 
+## Cliente novo (issue #8)
+
+- **Uma mensagem com vários dados:** faltando dois ou mais campos, o bot pede todos juntos ("me diga numa mensagem só: botijão, endereço, pagamento, nome"), com os botões do primeiro campo de opções fechadas. Faltando um, pergunta só ele.
+- **CPF:** na NFC-e o CPF do consumidor é opcional, então por padrão o bot não pede nem guarda. Com `CPF_REQUIRED=true`, pede só a cliente novo, valida os dígitos verificadores e mostra mascarado no resumo. Quem lê o CPF é o código: a resposta ao pedido de CPF não passa pelo LLM, e CPF no meio de outra mensagem vira `[cpf]` antes de ir ao Groq. No banco, a mensagem fica com o CPF mascarado, e ele sai do rascunho assim que o cadastro é criado.
+- **Cadastro com confirmação:** o resumo mostra o nome e avisa que o cadastro e o endereço ficam salvos. O cliente só é criado na RevGás depois do Confirmar. Se a venda falhar logo depois, o ID já criado é mantido, para a nova tentativa não duplicar o cadastro.
+- **Endereço novo de cliente antigo:** depois da venda, o bot pergunta se salva o endereço no cadastro (Salvar / Agora não). O `PUT` reenvia o cadastro atual inteiro, trocando só o endereço.
+
 ## Regras de qualquer etapa
 
 - **Atendente:** pedir atendente encerra com passagem (handoff). Depois disso o bot só registra as mensagens, sem responder, até a sessão expirar.

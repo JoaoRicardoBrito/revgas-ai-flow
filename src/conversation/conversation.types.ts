@@ -47,6 +47,13 @@ export const draftSchema = z.object({
        * vendas e o do cadastro (a API guarda um só no cliente).
        */
       savedAddresses: z.array(addressSchema).max(3).default([]),
+      /**
+       * Só dígitos, só quando a nota exige, só até criar o cadastro: depois
+       * sai do rascunho (LGPD).
+       */
+      cpf: z.string().nullable().default(null),
+      /** Cliente novo e a nota exige CPF (CPF_REQUIRED). */
+      needsCpf: z.boolean().default(false),
     })
     .nullable()
     .default(null),
@@ -64,6 +71,8 @@ export const draftSchema = z.object({
   /** Venda criada a partir do último pedido ("o mesmo de sempre"). */
   fromLastOrder: z.boolean().default(false),
   saleId: z.number().nullable().default(null),
+  /** Venda criada com endereço novo: perguntamos se salva no cadastro. */
+  pendingAddressSave: z.boolean().default(false),
   /** Mensagens seguidas que o bot não entendeu. */
   misunderstandings: z.number().int().nonnegative().default(0),
   /** O que a última pergunta pediu, para ler a próxima resposta. */
@@ -96,6 +105,11 @@ export interface Signal {
   button: string | null;
   /** O LLM falhou: o handler deve oferecer botões. */
   llmUnavailable: boolean;
+  /**
+   * Texto cru, para o que o código lê sozinho (CPF). Não vai para o LLM
+   * de novo nem para log.
+   */
+  text: string | null;
 }
 
 export type TurnEvent =

@@ -108,8 +108,9 @@ describe('cliente novo', () => {
   it('oferece produtos e formas de pagamento em botões', async () => {
     const { ctx, start } = setup();
 
+    // Cliente novo: a pergunta pede tudo junto, com os botões de produto.
     const askProduct = await runTurn(start, said({ intent: 'greeting' }), ctx);
-    expect(askProduct.draft.expecting).toBe('product');
+    expect(askProduct.draft.expecting).toBe('anything');
     const productButtons = askProduct.replies[0]?.buttons ?? [];
     expect(productButtons.map((b) => b.id)).toEqual([
       `product:${SEED.products.p13}`,
@@ -123,14 +124,15 @@ describe('cliente novo', () => {
       ctx,
     );
     expect(askAddress.draft.item?.description).toBe('GLP 20KG');
-    expect(askAddress.draft.expecting).toBe('address');
+    expect(askAddress.replies[0]?.text).toMatch(/endereço/);
+    expect(askAddress.replies[0]?.text).not.toMatch(/botijão/);
 
     const askPayment = await runTurn(
       askAddress,
       said({ address: fullAddress }),
       ctx,
     );
-    expect(askPayment.draft.expecting).toBe('payment');
+    expect(askPayment.replies[0]?.text).toMatch(/como vai pagar/);
     expect(askPayment.replies[0]?.buttons?.map((b) => b.id)).toContain(
       'payment:PIX',
     );

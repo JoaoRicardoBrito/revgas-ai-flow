@@ -1,3 +1,4 @@
+import { findCpf, maskCpf } from '../common/cpf.js';
 import type { Address, PaymentType } from '../revgas/revgas.types.js';
 import {
   findBySize,
@@ -8,7 +9,7 @@ import {
 } from './catalog.js';
 import type { Draft, Expecting, Reply, Signal } from './conversation.types.js';
 
-export type Field = 'product' | 'address' | 'payment' | 'name';
+export type Field = 'product' | 'address' | 'payment' | 'name' | 'cpf';
 
 export interface Offer {
   catalog: CatalogProduct[];
@@ -90,24 +91,68 @@ export function applySignal(
     next.customer = { ...next.customer, name: x.customerName };
   }
 
+  // CPF: lido pelo código no texto cru, e só quando a nota exige.
+  if (next.customer?.needsCpf && !next.customer.cpf && signal.text) {
+    const cpf = findCpf(signal.text);
+    if (cpf) {
+      next.customer = { ...next.customer, cpf };
+    } else if (
+      draft.expecting === 'cpf' &&
+      /\d{6,}/.test(signal.text.replace(/\D/g, ''))
+    ) {
+      notices.push('Esse CPF não parece válido. Confere os números?');
+    }
+  }
+
   return { draft: next, notices };
 }
 
-/** Próximo campo a pedir, na ordem do PRD. `null` = pronto para o resumo. */
-export function missingField(draft: Draft): Field | null {
-  if (!draft.item) return 'product';
-  if (!draft.address) return 'address';
-  if (!draft.payment) return 'payment';
-  if (draft.customer?.id === null && !draft.customer.name) return 'name';
-  return null;
+/** Tudo o que falta, na ordem do PRD. Vazio = pronto para o resumo. */
+export function missingFields(draft: Draft): Field[] {
+  const isNew = draft.customer?.id === null;
+  return [
+    !draft.item && 'product',
+    !draft.address && 'address',
+    !draft.payment && 'payment',
+    isNew && !draft.customer?.name && 'name',
+    isNew && draft.customer?.needsCpf && !draft.customer.cpf && 'cpf',
+  ].filter((f): f is Field => typeof f === 'string');
 }
 
-export const EXPECTING_BY_FIELD: Readonly<Record<Field, Expecting>> = {
+/** Próximo campo a pedir. `null` = pronto para o resumo. */
+export function missingField(draft: Draft): Field | null {
+  return missingFields(draft)[0] ?? null;
+}
+
+export const EXPECTING_BY_FIELD: Readonly<Record<Field, Expecting | 'cpf'>> = {
   product: 'product',
   address: 'address',
   payment: 'payment',
   name: 'name',
+  cpf: 'cpf',
 };
+
+const FIELD_HINTS: Readonly<Record<Field, string>> = {
+  product: 'qual botijão (P13, P20, P45...)',
+  address: 'o endereço: rua, número e bairro',
+  payment: 'como vai pagar na entrega (dinheiro, Pix, cartão)',
+  name: 'seu nome',
+  cpf: 'seu CPF (a nota fiscal exige)',
+};
+
+/**
+ * Cliente novo sem vários dados: pede tudo de uma vez, para ele poder
+ * responder numa mensagem só (issue #8). Os botões são do primeiro campo
+ * com opções fechadas, para quem prefere tocar.
+ */
+export function askForMany(fields: Field[], draft: Draft, offer: Offer): Reply {
+  const list = fields.map((f) => `- ${FIELD_HINTS[f]}`).join('\n');
+  const closed = fields.find((f) => f === 'product' || f === 'payment');
+  return {
+    text: `Para anotar seu pedido, me diga numa mensagem só:\n${list}`,
+    ...(closed ? { buttons: askFor(closed, draft, offer).buttons ?? [] } : {}),
+  };
+}
 
 /** Pergunta pelo campo, com botões sempre que houver opções fechadas. */
 export function askFor(field: Field, draft: Draft, offer: Offer): Reply {
@@ -149,6 +194,8 @@ export function askFor(field: Field, draft: Draft, offer: Offer): Reply {
       };
     case 'name':
       return { text: 'Para o cadastro, qual o seu nome?' };
+    case 'cpf':
+      return { text: 'A nota fiscal exige CPF. Qual o seu CPF?' };
     default: {
       const unknownField: never = field;
       throw new Error(`Campo desconhecido: ${String(unknownField)}`);
@@ -169,14 +216,20 @@ export function summary(
   const payment =
     paymentTypes.find((t) => t.code === draft.payment)?.description ??
     draft.payment;
+  const isNew = draft.customer?.id === null;
   const lines = [
     header ?? 'Confere o pedido:',
+    isNew && draft.customer?.name ? `Nome: ${draft.customer.name}` : '',
+    isNew && draft.customer?.cpf ? `CPF: ${maskCpf(draft.customer.cpf)}` : '',
     item
       ? `${item.quantity}x ${item.description} (${money(item.unitValue)} cada)`
       : '',
     draft.address ? `Entrega: ${formatAddress(draft.address)}` : '',
     `Pagamento na entrega: ${payment ?? ''}`,
     `Total: ${money(total(draft))}`,
+    isNew
+      ? 'Ao confirmar, seu cadastro e este endereço ficam salvos para os próximos pedidos.'
+      : '',
   ].filter(Boolean);
   return {
     text: lines.join('\n'),

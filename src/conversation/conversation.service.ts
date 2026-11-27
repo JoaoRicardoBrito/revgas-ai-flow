@@ -2,6 +2,7 @@ import type {
   Channel,
   ConversationStore,
 } from '../database/conversation.store.js';
+import { findCpf, isValidCpf, maskCpf } from '../common/cpf.js';
 import type { Conversation } from '../database/schema.js';
 import { EXPECTING, type MessageExtractor } from '../llm/message-extractor.js';
 import type { RevgasClient } from '../revgas/revgas-client.js';
@@ -12,6 +13,7 @@ import {
   type Draft,
   type Reply,
   type SessionState,
+  type Signal,
   type Step,
   type TurnOutcome,
 } from './conversation.types.js';
@@ -47,6 +49,8 @@ export interface HandleResult {
 export interface ConversationServiceOptions {
   /** Tempo parado até a sessão expirar (abandono). */
   ttlMs: number;
+  /** A nota fiscal exige CPF de cliente novo. Padrão: não. */
+  cpfRequired?: boolean;
 }
 
 /**
@@ -152,22 +156,27 @@ export class ConversationService {
     }
 
     const state = loadState(conversation);
-    let signal;
+    const text = message.text ?? '';
+    let signal: Signal;
     if (message.buttonId) {
       signal = signalFromButton(message.buttonId);
+    } else if (state.draft.expecting === 'cpf' && findCpf(text)) {
+      // Resposta ao pedido de CPF: o código lê, o texto não vai ao LLM.
+      signal = { ...signalFromButton(''), intent: 'order', button: null, text };
     } else {
       const expecting =
         EXPECTING.find((e) => e === state.draft.expecting) ?? 'anything';
-      const extraction = await this.extractor.extract(message.text ?? '', {
+      const extraction = await this.extractor.extract(redactCpfs(text), {
         expecting,
       });
       await this.store.addLlmTime(conversation.id, extraction.durationMs);
-      signal = signalFromExtraction(extraction);
+      signal = signalFromExtraction(extraction, text);
     }
 
     const result = await runTurn(state, signal, {
       revgas: this.revgas,
       contact,
+      settings: { cpfRequired: this.options.cpfRequired ?? false },
     });
     await this.persist(conversation, result, at);
 
@@ -243,8 +252,21 @@ export function loadState(conversation: Conversation): SessionState {
   return { step, draft };
 }
 
+/** Texto gravado no banco: CPF só com os dois últimos dígitos. */
 function bodyOf(message: IncomingMessage): string {
-  return (
-    message.text ?? (message.buttonId ? `[botão] ${message.buttonId}` : '')
+  if (message.text !== undefined) {
+    return replaceCpfs(message.text, (cpf) => maskCpf(cpf));
+  }
+  return message.buttonId ? `[botão] ${message.buttonId}` : '';
+}
+
+/** Texto que vai ao LLM: sem CPF. */
+export function redactCpfs(text: string): string {
+  return replaceCpfs(text, () => '[cpf]');
+}
+
+function replaceCpfs(text: string, by: (cpf: string) => string): string {
+  return text.replace(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/g, (match) =>
+    isValidCpf(match) ? by(match) : match,
   );
 }

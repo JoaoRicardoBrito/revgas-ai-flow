@@ -98,6 +98,7 @@ export class HttpRevgasClient implements RevgasClient {
       name: input.name,
       type: 'PHYSICAL',
       phones: [phone],
+      ...(input.cpf ? { cpf: input.cpf.replace(/\D/g, '') } : {}),
       ...(input.address ? addressToCustomerFields(input.address) : {}),
     };
     return toCustomer(
@@ -106,14 +107,22 @@ export class HttpRevgasClient implements RevgasClient {
   }
 
   async updateCustomerAddress(id: number, address: Address): Promise<Customer> {
-    // PUT substitui o cadastro: reenviamos os dados atuais junto do endereço.
-    const current = await this.request('GET', `/customers/${id}`, customerDto);
-    const body = {
-      name: current.name,
-      type: 'PHYSICAL',
-      phones: current.phones ?? [],
-      ...addressToCustomerFields(address),
-    };
+    // PUT substitui o cadastro: reenviamos tudo o que veio (CPF, e-mails,
+    // aniversário...), trocando só o endereço e tirando campos de leitura.
+    const current = await this.request(
+      'GET',
+      `/customers/${id}`,
+      customerDto.loose(),
+    );
+    const {
+      id: _id,
+      created_at: _createdAt,
+      updated_at: _updatedAt,
+      last_sale: _lastSale,
+      tag_description: _tagDescription,
+      ...editable
+    } = current;
+    const body = { ...editable, ...addressToCustomerFields(address) };
     return toCustomer(
       await this.request('PUT', `/customers/${id}`, customerDto, { body }),
     );

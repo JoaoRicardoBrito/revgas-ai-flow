@@ -7,6 +7,46 @@ import { handoff, outcome, type StepHandler } from './handler.js';
  */
 export const saleCreatedHandler: StepHandler = async (state, signal, ctx) => {
   const saleId = state.draft.saleId;
+  const { draft } = state;
+
+  // Resposta ao "quer salvar este endereço?" (issue #8).
+  const answer =
+    signal.button === 'save_address:yes' || signal.intent === 'confirm'
+      ? 'yes'
+      : signal.button === 'save_address:no' || signal.intent === 'deny'
+        ? 'no'
+        : null;
+  if (draft.pendingAddressSave && answer) {
+    const done = { ...draft, pendingAddressSave: false, expecting: 'anything' };
+    if (answer === 'no' || !draft.customer?.id || !draft.address) {
+      return outcome('sale_created', done, [{ text: 'Tudo bem, não salvei.' }]);
+    }
+    try {
+      await ctx.revgas.updateCustomerAddress(draft.customer.id, draft.address);
+      return outcome(
+        'sale_created',
+        {
+          ...done,
+          customer: {
+            ...draft.customer,
+            savedAddresses: [
+              draft.address,
+              ...draft.customer.savedAddresses,
+            ].slice(0, 3),
+          },
+        },
+        [{ text: 'Endereço salvo para os próximos pedidos.' }],
+      );
+    } catch (error) {
+      if (!(error instanceof RevgasError)) throw error;
+      return outcome('sale_created', done, [
+        {
+          text: 'Não consegui salvar o endereço agora, mas seu pedido está confirmado.',
+        },
+      ]);
+    }
+  }
+
   if (signal.intent === 'cancel' && saleId !== null) {
     try {
       const [motive] = await ctx.revgas.listCancelMotives();

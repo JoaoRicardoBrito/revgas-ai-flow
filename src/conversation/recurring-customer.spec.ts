@@ -184,7 +184,7 @@ describe('quem não é recorrente', () => {
       type: 'customer_identified',
       customerId: null,
     });
-    expect(result.draft.customer).toEqual({
+    expect(result.draft.customer).toMatchObject({
       id: null,
       name: null,
       savedAddresses: [],
