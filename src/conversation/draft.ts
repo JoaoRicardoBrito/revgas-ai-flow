@@ -1,4 +1,4 @@
-import type { PaymentType } from '../revgas/revgas.types.js';
+import type { Address, PaymentType } from '../revgas/revgas.types.js';
 import {
   findBySize,
   matchPayment,
@@ -65,9 +65,12 @@ export function applySignal(
   } else if (a?.street || a?.number || a?.neighborhood) {
     notices.push('Preciso da rua, do número e do bairro.');
   }
-  if (signal.button === 'address:saved' && next.customer?.savedAddress) {
-    next.address = next.customer.savedAddress;
-  }
+  const savedIndex = valueOf(signal.button, 'address');
+  const saved =
+    savedIndex === null
+      ? undefined
+      : next.customer?.savedAddresses[Number(savedIndex)];
+  if (saved) next.address = saved;
 
   // Pagamento: botão `payment:<código>` ou forma citada no texto.
   const accepted = offeredPayments(offer.paymentTypes);
@@ -118,13 +121,23 @@ export function askFor(field: Field, draft: Draft, offer: Offer): Reply {
         })),
       };
     case 'address': {
-      const saved = draft.customer?.savedAddress;
-      return saved
-        ? {
-            text: `Entrego no endereço de sempre (${formatAddress(saved)}) ou em outro? Se for outro, me diga rua, número e bairro.`,
-            buttons: [{ id: 'address:saved', label: 'Endereço de sempre' }],
-          }
-        : { text: 'Qual o endereço de entrega? Rua, número e bairro.' };
+      const saved = draft.customer?.savedAddresses ?? [];
+      if (saved.length === 0) {
+        return { text: 'Qual o endereço de entrega? Rua, número e bairro.' };
+      }
+      const list = saved
+        .map(
+          (a, i) =>
+            `${i + 1}. ${formatAddress(a)}${a.complement ? ` (${a.complement})` : ''}`,
+        )
+        .join('\n');
+      return {
+        text: `Onde entrego?\n${list}\nSe for outro, me diga rua, número e bairro.`,
+        buttons: saved.map((a, i) => ({
+          id: `address:${i}`,
+          label: buttonLabel(`${i + 1}. ${a.street}, ${a.number}`),
+        })),
+      };
     }
     case 'payment':
       return {
@@ -204,6 +217,45 @@ export function formatAddress(a: {
   neighborhood: string;
 }): string {
   return `${a.street}, ${a.number} - ${a.neighborhood}`;
+}
+
+/** Limite de título de botão do WhatsApp. */
+export const BUTTON_LABEL_MAX = 20;
+
+export function buttonLabel(text: string): string {
+  return text.length <= BUTTON_LABEL_MAX
+    ? text
+    : `${text.slice(0, BUTTON_LABEL_MAX - 1).trimEnd()}…`;
+}
+
+/** Chave de comparação de endereço: sem caixa, acento nem espaços extras. */
+function addressKey(x: Address): string {
+  return [x.street, x.number, x.neighborhood]
+    .join('|')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+/** Mesmo endereço, ignorando caixa, acento e espaços. */
+export function sameAddress(a: Address, b: Address): boolean {
+  return addressKey(a) === addressKey(b);
+}
+
+/** Endereços distintos, na ordem dada, até `max`. */
+export function distinctAddresses(
+  candidates: (Address | null | undefined)[],
+  max = 3,
+): Address[] {
+  const result: Address[] = [];
+  for (const candidate of candidates) {
+    if (!candidate || result.some((a) => sameAddress(a, candidate))) continue;
+    result.push(candidate);
+    if (result.length === max) break;
+  }
+  return result;
 }
 
 export function money(value: number): string {

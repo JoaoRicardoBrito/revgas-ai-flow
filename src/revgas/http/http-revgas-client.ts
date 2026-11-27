@@ -148,6 +148,11 @@ export class HttpRevgasClient implements RevgasClient {
   // ---- Vendas -------------------------------------------------------------
 
   async findLastSale(customerId: number): Promise<Sale | null> {
+    const [last] = await this.listRecentSales(customerId, 1);
+    return last ?? null;
+  }
+
+  async listRecentSales(customerId: number, limit: number): Promise<Sale[]> {
     const to = this.now();
     const from = new Date(to.getTime() - SALES_LOOKBACK_DAYS * 86_400_000);
     // A listagem já vem da mais nova para a mais antiga.
@@ -157,11 +162,10 @@ export class HttpRevgasClient implements RevgasClient {
         establishment_id: this.options.establishmentId,
         from: isoDate(from),
         to: isoDate(to),
-        page_size: 1,
+        page_size: Math.min(Math.max(1, limit), PAGE_SIZE_MAX),
       },
     });
-    const [last] = page.data;
-    return last ? toSale(last) : null;
+    return page.data.map(toSale);
   }
 
   async getSale(id: number): Promise<Sale> {

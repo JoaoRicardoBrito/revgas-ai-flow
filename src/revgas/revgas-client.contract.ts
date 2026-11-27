@@ -171,6 +171,25 @@ export function writeContract(target: ContractTarget, fx: WriteFixtures): void {
       expect(sale?.items.length).toBeGreaterThan(0);
     });
 
+    it('lista as vendas recentes da mais nova para a mais antiga', async () => {
+      const client = target.client();
+      const last = await client.findLastSale(fx.recurringCustomerId);
+
+      const recent = await client.listRecentSales(fx.recurringCustomerId, 5);
+
+      expect(recent.length).toBeGreaterThan(1);
+      expect(recent[0]?.id).toBe(last?.id);
+      expect(recent.every((s) => s.customerId === fx.recurringCustomerId)).toBe(
+        true,
+      );
+    });
+
+    it('respeita o limite de vendas recentes', async () => {
+      await expect(
+        target.client().listRecentSales(fx.recurringCustomerId, 1),
+      ).resolves.toHaveLength(1);
+    });
+
     it('devolve null para cliente sem vendas', async () => {
       await expect(
         target.client().findLastSale(fx.customerWithoutSalesId),

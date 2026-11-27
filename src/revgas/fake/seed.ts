@@ -15,7 +15,51 @@ export const SEED = {
   products: { p13: 10, p20: 11, p45: 12 },
   cancelMotive: 1,
   lastSaleOfRecurring: 100,
+  olderSalesOfRecurring: { atWork: 99, atHomeAgain: 98 },
 } as const;
+
+/** Venda antiga e conferida da cliente recorrente, num endereço dado. */
+function pastSale(
+  id: number,
+  createdAt: string,
+  address: {
+    location: string;
+    number: string;
+    neighborhood: string;
+    complement: string;
+  },
+): FakeSale {
+  return {
+    id,
+    status: 'CHECK',
+    total: 115,
+    channel: 'DISK',
+    origin: 'REVGAS',
+    customer_id: SEED.recurringCustomer.id,
+    customer_name: 'Maria Cliente Exemplo',
+    establishment_id: FAKE_ESTABLISHMENT_ID,
+    ...address,
+    landmark: null,
+    city: 'Teresina',
+    state_federation: 'PI',
+    lat: null,
+    lon: null,
+    observation: null,
+    products: [
+      {
+        id: id * 10,
+        product_id: SEED.products.p13,
+        product_description: 'GLP 13KG',
+        quantity: 1,
+        value: 115,
+        discount: 0,
+      },
+    ],
+    payments: [{ id: id * 10, type: 'MONEY', value: 115 }],
+    logs: [{ id: id * 10, sale_id: id, status: 'OPEN', created_at: createdAt }],
+    created_at: createdAt,
+  };
+}
 
 export interface FakeSeed {
   customers: FakeCustomer[];
@@ -151,6 +195,19 @@ export function createSeed(now: Date): FakeSeed {
       ],
       created_at: lastSaleAt,
     },
+    pastSale(SEED.olderSalesOfRecurring.atWork, daysAgo(40), {
+      location: 'Avenida Frei Serafim',
+      number: '900',
+      neighborhood: 'Centro',
+      complement: 'Sala 2',
+    }),
+    // Mesmo endereço da última venda: não deve virar opção repetida.
+    pastSale(SEED.olderSalesOfRecurring.atHomeAgain, daysAgo(60), {
+      location: 'Rua das Flores',
+      number: '123',
+      neighborhood: 'Centro',
+      complement: 'Casa',
+    }),
   ];
 
   const cancelMotives: FakeCancelMotive[] = [

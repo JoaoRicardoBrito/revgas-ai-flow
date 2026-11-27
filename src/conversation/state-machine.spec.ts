@@ -165,7 +165,7 @@ describe('confirmação', () => {
     expect(askAddress.step).toBe('collecting');
     expect(askAddress.draft.address).toBeNull();
     expect(askAddress.draft.item).not.toBeNull();
-    expect(askAddress.replies[0]?.buttons?.[0]?.id).toBe('address:saved');
+    expect(askAddress.replies[0]?.buttons?.[0]?.id).toBe('address:0');
   });
 
   it('produto esgotado na criação volta a perguntar o produto', async () => {
