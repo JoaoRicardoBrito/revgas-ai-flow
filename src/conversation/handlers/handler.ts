@@ -11,8 +11,9 @@ import type {
 } from '../conversation.types.js';
 import {
   askFor,
+  askForMany,
   EXPECTING_BY_FIELD,
-  missingField,
+  missingFields,
   summary,
   type Offer,
 } from '../draft.js';
@@ -21,6 +22,15 @@ export interface TurnContext {
   revgas: RevgasClient;
   /** Telefone (ou ID do simulador) de quem escreve. */
   contact: string;
+  settings?: ConversationSettings;
+}
+
+export interface ConversationSettings {
+  /**
+   * A nota fiscal da revenda exige CPF do consumidor. Na NFC-e ele é
+   * opcional, então o padrão é não pedir (CPF_REQUIRED).
+   */
+  cpfRequired: boolean;
 }
 
 export type StepHandler = (
@@ -58,8 +68,19 @@ export function advance(
   events: TurnEvent[] = [],
   summaryHeader?: string,
 ): TurnOutcome {
-  const field = missingField(draft);
+  const fields = missingFields(draft);
+  const [field] = fields;
   const prefix = notices.length ? `${notices.join(' ')}\n` : '';
+  if (field && fields.length >= 2 && draft.customer?.id === null) {
+    // Cliente novo: pede tudo o que falta numa mensagem só.
+    const ask = askForMany(fields, draft, offer);
+    return outcome(
+      'collecting',
+      { ...draft, expecting: 'anything' },
+      [{ ...ask, text: prefix + ask.text }],
+      events,
+    );
+  }
   if (field) {
     const ask = askFor(field, draft, offer);
     return outcome(

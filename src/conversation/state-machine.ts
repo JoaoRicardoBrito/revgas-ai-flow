@@ -83,23 +83,37 @@ const BUTTON_INTENTS: Readonly<Record<string, Signal['intent']>> = {
   product: 'change_product',
   payment: 'change_payment',
   address: 'change_address',
+  'save_address:yes': 'confirm',
+  'save_address:no': 'deny',
 };
 
 /** Toque em botão: vira intenção direto, sem passar pelo LLM. */
 export function signalFromButton(buttonId: string): Signal {
   const [prefix = ''] = buttonId.split(':');
   const intent =
-    BUTTON_INTENTS[prefix] ?? (prefix === 'change' ? 'deny' : 'unknown');
-  return { intent, extraction: null, button: buttonId, llmUnavailable: false };
+    BUTTON_INTENTS[buttonId] ??
+    BUTTON_INTENTS[prefix] ??
+    (prefix === 'change' ? 'deny' : 'unknown');
+  return {
+    intent,
+    extraction: null,
+    button: buttonId,
+    llmUnavailable: false,
+    text: null,
+  };
 }
 
-export function signalFromExtraction(result: ExtractionResult): Signal {
+export function signalFromExtraction(
+  result: ExtractionResult,
+  text: string | null = null,
+): Signal {
   if (result.ok) {
     return {
       intent: result.extraction.intent,
       extraction: result.extraction,
       button: null,
       llmUnavailable: false,
+      text,
     };
   }
   return {
@@ -107,5 +121,6 @@ export function signalFromExtraction(result: ExtractionResult): Signal {
     extraction: null,
     button: null,
     llmUnavailable: result.reason !== 'empty_message',
+    text,
   };
 }

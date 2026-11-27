@@ -31,8 +31,21 @@ export const identifyingHandler: StepHandler = async (state, signal, ctx) => {
   let draft: Draft = {
     ...state.draft,
     customer: customer
-      ? { id: customer.id, name: customer.name, savedAddresses }
-      : { id: null, name: null, savedAddresses: [] },
+      ? {
+          id: customer.id,
+          name: customer.name,
+          savedAddresses,
+          cpf: null,
+          needsCpf: false,
+        }
+      : {
+          id: null,
+          name: null,
+          savedAddresses: [],
+          cpf: null,
+          // CPF só se a nota exigir; cliente antigo já tem cadastro.
+          needsCpf: ctx.settings?.cpfRequired ?? false,
+        },
   };
 
   const notices: string[] = customer ? [] : ['Oi! Vou anotar seu pedido.'];

@@ -1,10 +1,12 @@
 import { RevgasError } from '../../revgas/revgas.errors.js';
-import type { Draft } from '../conversation.types.js';
+import type { Draft, Reply } from '../conversation.types.js';
 import {
   applySignal,
   askFor,
   CHANGE_MENU,
   clearField,
+  formatAddress,
+  sameAddress,
   summary,
   total,
 } from '../draft.js';
@@ -57,17 +59,30 @@ async function createSale(
     return advance(draft, offer, []);
   }
 
-  try {
-    const customerId =
-      customer.id ??
-      (
-        await ctx.revgas.createCustomer({
-          name: customer.name ?? 'Cliente WhatsApp',
-          phone: ctx.contact,
-          address,
-        })
-      ).id;
+  // Cliente novo: cria o cadastro (com o endereço confirmado no resumo) e
+  // guarda o ID já, para uma falha na venda não gerar cadastro repetido.
+  // O CPF sai do rascunho assim que vai para o cadastro.
+  if (customer.id === null) {
+    const created = await ctx.revgas.createCustomer({
+      name: customer.name ?? 'Cliente WhatsApp',
+      phone: ctx.contact,
+      address,
+      ...(customer.cpf ? { cpf: customer.cpf } : {}),
+    });
+    draft = {
+      ...draft,
+      customer: {
+        ...customer,
+        id: created.id,
+        cpf: null,
+        needsCpf: false,
+        savedAddresses: [address],
+      },
+    };
+  }
+  const customerId = draft.customer?.id ?? 0;
 
+  try {
     const sale = await ctx.revgas.createSale({
       customerId,
       address,
@@ -75,15 +90,32 @@ async function createSale(
       payments: [{ code: payment, value: total(draft) }],
     });
 
+    // Cliente antigo com endereço que ainda não conhecíamos: oferece salvar.
+    const newAddress =
+      customer.id !== null &&
+      !customer.savedAddresses.some((a) => sameAddress(a, address));
+    const replies: Reply[] = [
+      { text: `Pedido nº ${sale.id} registrado! Logo sai para entrega.` },
+    ];
+    if (newAddress) {
+      replies.push({
+        text: `Quer salvar ${formatAddress(address)} no seu cadastro para os próximos pedidos?`,
+        buttons: [
+          { id: 'save_address:yes', label: 'Salvar' },
+          { id: 'save_address:no', label: 'Agora não' },
+        ],
+      });
+    }
+
     return outcome(
       'sale_created',
       {
         ...draft,
-        customer: { ...customer, id: customerId },
         saleId: sale.id,
-        expecting: 'anything',
+        pendingAddressSave: newAddress,
+        expecting: newAddress ? 'confirmation' : 'anything',
       },
-      [{ text: `Pedido nº ${sale.id} registrado! Logo sai para entrega.` }],
+      replies,
       [{ type: 'sale_created', saleId: sale.id }],
     );
   } catch (error) {

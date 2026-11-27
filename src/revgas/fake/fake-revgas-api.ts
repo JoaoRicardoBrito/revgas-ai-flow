@@ -19,6 +19,7 @@ export interface FakeCustomer {
   created_at: string;
   updated_at: string;
   name: string;
+  cpf: string | null;
   type: 'PHYSICAL' | 'JURIDICAL';
   phones: string[];
   location: string | null;
@@ -758,12 +759,20 @@ function validateCustomer(body: Record<string, unknown>): FieldError[] {
       errors.push({ field: `phones[${i}]`, message: 'invalid phone' });
     }
   });
+  // Documentado: CPF com 11 dígitos (ex.: "00000000000").
+  if (
+    body.cpf != null &&
+    !(typeof body.cpf === 'string' && /^\d{11}$/.test(body.cpf))
+  ) {
+    errors.push({ field: 'cpf', message: 'invalid cpf' });
+  }
   return errors;
 }
 
 function customerFields(body: Record<string, unknown>) {
   return {
     name: str(body.name) ?? '',
+    cpf: str(body.cpf),
     type:
       body.type === 'JURIDICAL'
         ? ('JURIDICAL' as const)

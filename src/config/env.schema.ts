@@ -23,6 +23,8 @@ export const envSchema = z
     REVGAS_API_BASE_URL: z.url().default('https://api.revgas.com/v1'),
     REVGAS_API_KEY: z.string().optional(),
     REVGAS_USE_MOCK: z.stringbool().default(true),
+    /** A nota fiscal exige CPF de cliente novo. Na NFC-e é opcional. */
+    CPF_REQUIRED: z.stringbool().default(false),
     /** Revenda (estabelecimento) usada em produtos, pagamentos e vendas. */
     REVGAS_ESTABLISHMENT_ID: z.coerce.number().int().positive().optional(),
 

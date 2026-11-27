@@ -68,6 +68,8 @@ export interface Customer {
 export interface NewCustomer {
   name: string;
   phone: string;
+  /** Só quando a nota fiscal exigir (ver CPF_REQUIRED). */
+  cpf?: string;
   address?: Address;
 }
 
