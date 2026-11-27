@@ -86,6 +86,27 @@ export const draftSchema = z.object({
   saleId: z.number().nullable().default(null),
   /** Venda criada com endereço novo: perguntamos se salva no cadastro. */
   pendingAddressSave: z.boolean().default(false),
+  /** Localização recebida, esperando rua, número e bairro (issue #11). */
+  pendingLocation: z
+    .object({ latitude: z.number(), longitude: z.number() })
+    .nullable()
+    .default(null),
+  /**
+   * Alteração proposta numa venda já criada, esperando o "Confirmar
+   * alteração" (PRD 6.1).
+   */
+  pendingChange: z
+    .object({
+      item: z.object({
+        productId: z.number(),
+        description: z.string(),
+        quantity: z.number().int().positive(),
+        unitValue: z.number().nonnegative(),
+      }),
+      address: addressSchema,
+    })
+    .nullable()
+    .default(null),
   /** Mensagens seguidas que o bot não entendeu. */
   misunderstandings: z.number().int().nonnegative().default(0),
   /** O que a última pergunta pediu, para ler a próxima resposta. */
@@ -123,6 +144,8 @@ export interface Signal {
   button: string | null;
   /** O LLM falhou: o handler deve oferecer botões. */
   llmUnavailable: boolean;
+  /** Localização do WhatsApp, quando a mensagem é um ponto no mapa. */
+  location: { latitude: number; longitude: number } | null;
   /**
    * Texto cru, para o que o código lê sozinho (CPF). Não vai para o LLM
    * de novo nem para log.

@@ -1,5 +1,6 @@
 import type { RevgasClient } from '../../revgas/revgas-client.js';
 import type { Catalog } from '../catalog.js';
+import type { Coverage } from '../coverage.js';
 import type {
   Draft,
   Reply,
@@ -38,6 +39,8 @@ export interface ConversationSettings {
    * cliente real nunca recebe código de demonstração.
    */
   pixDemo?: boolean;
+  /** Área de entrega (COVERAGE_*). */
+  coverage?: Coverage;
 }
 
 export type StepHandler = (
@@ -56,8 +59,8 @@ export function outcome(
   return { step, draft, replies, events };
 }
 
-export function loadOffer(ctx: TurnContext): Promise<Offer> {
-  return ctx.catalog.offer();
+export async function loadOffer(ctx: TurnContext): Promise<Offer> {
+  return { ...(await ctx.catalog.offer()), coverage: ctx.settings?.coverage };
 }
 
 /**
@@ -122,6 +125,27 @@ export function advance(
     [{ ...reply, text: prefix + reply.text }],
     events,
   );
+}
+
+/**
+ * Endereço fora da área de entrega (issue #11): não aceita o endereço,
+ * oferece os salvos que são atendidos ou o atendente.
+ */
+export function outsideCoverage(
+  draft: Draft,
+  offer: Offer,
+  notices: string[],
+): TurnOutcome {
+  const ask = askFor('address', { ...draft, pendingLocation: null }, offer);
+  return outcome('collecting', { ...draft, expecting: 'address' }, [
+    {
+      text: `${notices.join(' ')}\nPode me passar outro endereço? Se preferir, chamo um atendente.`,
+      buttons: [
+        ...(ask.buttons ?? []),
+        { id: 'human', label: 'Falar com atendente' },
+      ],
+    },
+  ]);
 }
 
 /** Não entendeu: repete a pergunta com botões; na segunda vez, atendente. */

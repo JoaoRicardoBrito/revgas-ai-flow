@@ -95,6 +95,8 @@ const BUTTON_INTENTS: Readonly<Record<string, Signal['intent']>> = {
   address: 'change_address',
   'save_address:yes': 'confirm',
   'save_address:no': 'deny',
+  'sale_change:confirm': 'confirm',
+  'sale_change:keep': 'deny',
 };
 
 /** Toque em botão: vira intenção direto, sem passar pelo LLM. */
@@ -110,6 +112,7 @@ export function signalFromButton(buttonId: string): Signal {
     button: buttonId,
     llmUnavailable: false,
     text: null,
+    location: null,
   };
 }
 
@@ -124,6 +127,7 @@ export function signalFromExtraction(
       button: null,
       llmUnavailable: false,
       text,
+      location: null,
     };
   }
   return {
@@ -132,5 +136,6 @@ export function signalFromExtraction(
     button: null,
     llmUnavailable: result.reason !== 'empty_message',
     text,
+    location: null,
   };
 }

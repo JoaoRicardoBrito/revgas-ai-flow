@@ -20,6 +20,7 @@ import {
   parsePriceList,
   type PriceList,
 } from './catalog.js';
+import { parseCoverage } from './coverage.js';
 import { ConversationService } from './conversation.service.js';
 
 /** Fecha sessões paradas a cada minuto (abandono). */
@@ -99,6 +100,13 @@ class SessionExpirer implements OnModuleInit, OnModuleDestroy {
           cpfRequired: config.get('CPF_REQUIRED', { infer: true }),
           // Pix fictício só com a RevGás simulada.
           pixDemo: config.get('REVGAS_USE_MOCK', { infer: true }),
+          coverage: parseCoverage({
+            neighborhoods: config.get('COVERAGE_NEIGHBORHOODS', {
+              infer: true,
+            }),
+            center: config.get('COVERAGE_CENTER', { infer: true }),
+            radiusKm: config.get('COVERAGE_RADIUS_KM', { infer: true }),
+          }),
         }),
     },
     SessionExpirer,

@@ -10,6 +10,7 @@ import {
   type Offer,
 } from './catalog.js';
 import type { Draft, Expecting, Reply, Signal } from './conversation.types.js';
+import { isCovered, NO_COVERAGE_RULES } from './coverage.js';
 
 export type Field = 'product' | 'address' | 'payment' | 'name' | 'cpf';
 
@@ -23,7 +24,7 @@ export function applySignal(
   draft: Draft,
   signal: Signal,
   offer: Offer,
-): { draft: Draft; notices: string[] } {
+): { draft: Draft; notices: string[]; outsideCoverage: boolean } {
   const next: Draft = { ...draft };
   const notices: string[] = [];
   const x = signal.extraction;
@@ -83,25 +84,46 @@ export function applySignal(
     next.item = { ...next.item, quantity: x.quantity };
   }
 
-  // Endereço: completo no texto, ou o salvo por botão.
+  // Endereço: digitado, salvo (botão) ou localização do WhatsApp (issue #11).
+  // A localização sozinha não diz rua e número: guardamos o ponto para o
+  // entregador e pedimos o resto.
+  if (signal.location) {
+    next.pendingLocation = signal.location;
+  }
   const a = x?.address;
+  let candidate: Address | undefined;
   if (a?.street && a.number && a.neighborhood) {
-    next.address = {
+    candidate = {
       street: a.street,
       number: a.number,
       neighborhood: a.neighborhood,
       ...(a.complement ? { complement: a.complement } : {}),
       ...(a.landmark ? { landmark: a.landmark } : {}),
     };
+    const point = next.pendingLocation;
+    if (point) {
+      candidate.latitude = String(point.latitude);
+      candidate.longitude = String(point.longitude);
+    }
   } else if (a?.street || a?.number || a?.neighborhood) {
     notices.push('Preciso da rua, do número e do bairro.');
+  } else if (signal.location) {
+    notices.push('Recebi sua localização.');
   }
   const savedIndex = valueOf(signal.button, 'address');
-  const saved =
-    savedIndex === null
-      ? undefined
-      : next.customer?.savedAddresses[Number(savedIndex)];
-  if (saved) next.address = saved;
+  if (savedIndex !== null) {
+    candidate = next.customer?.savedAddresses[Number(savedIndex)] ?? candidate;
+  }
+  let outsideCoverage = false;
+  if (candidate) {
+    if (isCovered(candidate, offer.coverage ?? NO_COVERAGE_RULES)) {
+      next.address = candidate;
+      next.pendingLocation = null;
+    } else {
+      outsideCoverage = true;
+      notices.push(`Ainda não entregamos em ${candidate.neighborhood}.`);
+    }
+  }
 
   // Pagamento: botão `payment:<código>` ou forma citada no texto. Só as
   // que este cliente pode usar (fiado e vale gás com autorização).
@@ -140,7 +162,7 @@ export function applySignal(
     }
   }
 
-  return { draft: next, notices };
+  return { draft: next, notices, outsideCoverage };
 }
 
 /** Tudo o que falta, na ordem do PRD. Vazio = pronto para o resumo. */
@@ -202,21 +224,34 @@ export function askFor(field: Field, draft: Draft, offer: Offer): Reply {
         })),
       };
     case 'address': {
-      const saved = draft.customer?.savedAddresses ?? [];
+      if (draft.pendingLocation) {
+        return {
+          text: 'Para o entregador achar, me diga a rua, o número e o bairro.',
+        };
+      }
+      // Só endereços salvos dentro da área de entrega; o índice do botão é
+      // o da lista salva, para o toque continuar valendo.
+      const saved = (draft.customer?.savedAddresses ?? [])
+        .map((address, index) => ({ address, index }))
+        .filter(({ address }) =>
+          isCovered(address, offer.coverage ?? NO_COVERAGE_RULES),
+        );
       if (saved.length === 0) {
-        return { text: 'Qual o endereço de entrega? Rua, número e bairro.' };
+        return {
+          text: 'Qual o endereço de entrega? Rua, número e bairro, ou mande a localização.',
+        };
       }
       const list = saved
         .map(
-          (a, i) =>
-            `${i + 1}. ${formatAddress(a)}${a.complement ? ` (${a.complement})` : ''}`,
+          ({ address: a }, n) =>
+            `${n + 1}. ${formatAddress(a)}${a.complement ? ` (${a.complement})` : ''}`,
         )
         .join('\n');
       return {
-        text: `Onde entrego?\n${list}\nSe for outro, me diga rua, número e bairro.`,
-        buttons: saved.map((a, i) => ({
-          id: `address:${i}`,
-          label: buttonLabel(`${i + 1}. ${a.street}, ${a.number}`),
+        text: `Onde entrego?\n${list}\nSe for outro, me diga rua, número e bairro, ou mande a localização.`,
+        buttons: saved.map(({ address: a, index }, n) => ({
+          id: `address:${index}`,
+          label: buttonLabel(`${n + 1}. ${a.street}, ${a.number}`),
         })),
       };
     }

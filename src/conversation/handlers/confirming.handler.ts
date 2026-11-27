@@ -22,6 +22,7 @@ import {
   misunderstood,
   outcome,
   outOfStock,
+  outsideCoverage,
   type StepHandler,
   type TurnContext,
 } from './handler.js';
@@ -41,6 +42,9 @@ export const confirmingHandler: StepHandler = async (state, signal, ctx) => {
 
   // Mudou algo direto no texto ("troca para o de 20"): reaplica e mostra de novo.
   const applied = applySignal(state.draft, signal, offer);
+  if (applied.outsideCoverage) {
+    return outsideCoverage(applied.draft, offer, applied.notices);
+  }
   if (JSON.stringify(applied.draft) !== JSON.stringify(state.draft)) {
     return advance(
       { ...applied.draft, fromLastOrder: false },

@@ -1,13 +1,32 @@
 import { RevgasError } from '../../revgas/revgas.errors.js';
 import { handoff, outcome, type StepHandler } from './handler.js';
+import { applyChange, proposeChange, wantsChange } from './sale-change.js';
 
 /**
- * Venda criada, ainda não despachada: o bot cancela (PRD 6.1).
- * Regras finas de cancelamento ficam na issue #12.
+ * Venda criada, ainda não despachada (PRD 6.1): o bot altera produto e
+ * endereço (com revalidação) e cancela. Regras finas de cancelamento
+ * ficam na issue #12.
  */
 export const saleCreatedHandler: StepHandler = async (state, signal, ctx) => {
   const saleId = state.draft.saleId;
   const { draft } = state;
+
+  // Resposta à proposta de alteração.
+  if (draft.pendingChange) {
+    if (
+      signal.button === 'sale_change:confirm' ||
+      signal.intent === 'confirm'
+    ) {
+      return applyChange(draft, ctx);
+    }
+    if (signal.button === 'sale_change:keep' || signal.intent === 'deny') {
+      return outcome(
+        'sale_created',
+        { ...draft, pendingChange: null, expecting: 'anything' },
+        [{ text: 'Tudo bem, seu pedido continua como estava.' }],
+      );
+    }
+  }
 
   // Resposta ao "quer salvar este endereço?" (issue #8).
   const answer =
@@ -47,6 +66,10 @@ export const saleCreatedHandler: StepHandler = async (state, signal, ctx) => {
     }
   }
 
+  if (signal.intent !== 'cancel' && wantsChange(signal)) {
+    return proposeChange(state, signal, ctx);
+  }
+
   if (signal.intent === 'cancel' && saleId !== null) {
     try {
       const [motive] = await ctx.revgas.listCancelMotives();
@@ -74,11 +97,38 @@ export const saleCreatedHandler: StepHandler = async (state, signal, ctx) => {
   ]);
 };
 
-/** Entregador a caminho: cancelar só com atendente (PRD 6.1). */
+/**
+ * Entregador a caminho (PRD 6.1): produto não muda; endereço e
+ * cancelamento só com atendente, que combina com o entregador.
+ */
 export const dispatchedHandler: StepHandler = (state, signal) => {
   if (signal.intent === 'cancel' || signal.intent === 'complaint') {
     return Promise.resolve(
       handoff(state.draft, 'cancelamento ou reclamação após despacho'),
+    );
+  }
+  const x = signal.extraction;
+  if (
+    signal.intent === 'change_address' ||
+    signal.location !== null ||
+    Boolean(x?.address?.street)
+  ) {
+    return Promise.resolve(
+      handoff(state.draft, 'alterar endereço após despacho'),
+    );
+  }
+  if (
+    signal.intent === 'change_product' ||
+    x?.productSizeKg ||
+    x?.productRelative
+  ) {
+    return Promise.resolve(
+      outcome('dispatched', state.draft, [
+        {
+          text: 'Seu pedido já saiu para entrega, então não dá mais para trocar o produto. Se precisar, chamo um atendente.',
+          buttons: [{ id: 'human', label: 'Falar com atendente' }],
+        },
+      ]),
     );
   }
   return Promise.resolve(

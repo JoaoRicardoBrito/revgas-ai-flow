@@ -52,6 +52,7 @@ export function said(
     button: null,
     llmUnavailable: false,
     text,
+    location: null,
   };
 }
 
@@ -64,6 +65,7 @@ export const NOT_UNDERSTOOD: Signal = {
   button: null,
   llmUnavailable: true,
   text: null,
+  location: null,
 };
 
 export const fullAddress = {

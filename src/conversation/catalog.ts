@@ -6,6 +6,7 @@ import type {
 } from '../revgas/revgas.types.js';
 import type { PAYMENT_METHODS } from '../llm/extraction.schema.js';
 import type { PriceList } from '../config/price-list.js';
+import type { Coverage } from './coverage.js';
 
 export { parsePriceList, type PriceList } from '../config/price-list.js';
 
@@ -29,6 +30,8 @@ export interface CatalogProduct extends Product {
 export interface Offer {
   catalog: CatalogProduct[];
   paymentTypes: PaymentType[];
+  /** Área de entrega da revenda (issue #11). Sem regras: tudo atendido. */
+  coverage?: Coverage;
 }
 
 /** Lê o peso da descrição da RevGás, ex.: "GLP 13KG". */

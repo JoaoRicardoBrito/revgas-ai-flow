@@ -4,6 +4,7 @@ import {
   canceledBeforeSale,
   loadOffer,
   misunderstood,
+  outsideCoverage,
   type StepHandler,
 } from './handler.js';
 
@@ -13,6 +14,13 @@ export const collectingHandler: StepHandler = async (state, signal, ctx) => {
 
   const offer = await loadOffer(ctx);
   const applied = applySignal(state.draft, signal, offer);
+  if (applied.outsideCoverage) {
+    return outsideCoverage(
+      { ...applied.draft, misunderstandings: 0 },
+      offer,
+      applied.notices,
+    );
+  }
   const progressed =
     JSON.stringify(applied.draft) !== JSON.stringify(state.draft);
 

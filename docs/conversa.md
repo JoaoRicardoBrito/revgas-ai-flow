@@ -59,6 +59,14 @@ A tabela fica em [`transitions.ts`](../src/conversation/transitions.ts). Qualque
 - **Pix fictício:** só no modo mock, depois da venda com Pix, um "copia e cola" marcado como demonstração. Duas travas: a chave é de um domínio `.invalid`, que não existe, e o CRC é invertido de propósito, para o banco recusar o código ([`pix-demo.ts`](../src/payments/pix-demo.ts)). No modo real, Pix é na entrega.
 - **Recusa:** simulada no mock. A venda não é criada (nada é despachado); o bot oferece outra forma, sem a recusada; na segunda recusa, atendente.
 
+## Alterar produto e endereço (issue #11)
+
+- **Antes de confirmar:** trocar produto ou quantidade recalcula o total do resumo.
+- **Endereço:** digitado, escolhido entre os salvos ou pela localização do WhatsApp. Localização com endereço escrito (local compartilhado) passa pelo extrator. Só o ponto no mapa: as coordenadas ficam guardadas para o entregador e o bot pede rua, número e bairro. Não usamos serviço de geocodificação, para a localização não ir a mais um terceiro. No banco, a mensagem fica só como `[localização]`.
+- **Área de entrega:** a revenda configura bairros (`COVERAGE_NEIGHBORHOODS`) e/ou um raio em volta da loja (`COVERAGE_CENTER` + `COVERAGE_RADIUS_KM`). Vale o bairro na lista ou o ponto dentro do raio. Sem regras, tudo é atendido. Fora da área, o endereço não é aceito e o bot oferece outro endereço ou o atendente. Endereços salvos fora da área não aparecem como opção, e o do último pedido não é reaproveitado.
+- **Depois da venda, antes do despacho (PRD 6.1):** o bot propõe a alteração com o novo total e só chama `PUT /sales/{id}` depois do "Confirmar alteração". Revalida cobertura e estoque (consulta na hora, contando só o que aumenta). Se a RevGás recusar (ex.: venda já confirmada), passa para o atendente.
+- **Depois do despacho:** produto não muda; endereço só com atendente.
+
 ## Regras de qualquer etapa
 
 - **Atendente:** pedir atendente encerra com passagem (handoff). Depois disso o bot só registra as mensagens, sem responder, até a sessão expirar.
@@ -79,7 +87,8 @@ A tabela fica em [`transitions.ts`](../src/conversation/transitions.ts). Qualque
 |-------|------|-------|
 | Preço | `PRODUCT_PRICES` configurado pela revenda (a API não tem preço); recorrente paga o do último pedido. Sem tabela: demonstração no mock, nada à venda no modo real | pergunta 2 da #1 |
 | Fiado e vale gás | Fiado com limite de crédito no cadastro; vale gás com categoria "vale gás" (suposição) | pergunta 13 da #1 |
-| Endereço | Até 3 conhecidos (últimas vendas + cadastro) em botões, ou digitado; sem cobertura nem localização | #11 |
+| Área de entrega | Configurada pela revenda (`COVERAGE_*`); a API não tem | pergunta 6 da #1 |
+| Entregue | Sem estado de entrega ainda: alteração e cancelamento depois da entrega | #12 |
 | Cancelamento | Usa o primeiro motivo cadastrado | #12 |
 | Atendente | Sem resumo, sem horário de funcionamento, sem painel | #13 |
 | Despacho | `ConversationService.notifyDispatched`, ainda sem quem chame | #13, #16 |
