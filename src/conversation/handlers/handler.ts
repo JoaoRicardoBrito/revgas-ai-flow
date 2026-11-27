@@ -1,5 +1,5 @@
 import type { RevgasClient } from '../../revgas/revgas-client.js';
-import { loadCatalog } from '../catalog.js';
+import type { Catalog } from '../catalog.js';
 import type {
   Draft,
   Reply,
@@ -20,6 +20,8 @@ import {
 
 export interface TurnContext {
   revgas: RevgasClient;
+  /** Produtos, preços e formas de pagamento, com cache. */
+  catalog: Catalog;
   /** Telefone (ou ID do simulador) de quem escreve. */
   contact: string;
   settings?: ConversationSettings;
@@ -49,12 +51,30 @@ export function outcome(
   return { step, draft, replies, events };
 }
 
-export async function loadOffer(revgas: RevgasClient): Promise<Offer> {
-  const [catalog, paymentTypes] = [
-    await loadCatalog(revgas),
-    await revgas.listPaymentTypes(),
-  ];
-  return { catalog, paymentTypes };
+export function loadOffer(ctx: TurnContext): Promise<Offer> {
+  return ctx.catalog.offer();
+}
+
+/**
+ * Sem estoque (issue #9): oferece os outros produtos à venda e o atendente.
+ * Nunca segue para a venda. Mais de 3 opções o canal mostra como lista.
+ */
+export function outOfStock(
+  draft: Draft,
+  offer: Offer,
+  message: string,
+): TurnOutcome {
+  const cleared: Draft = { ...draft, item: null, fromLastOrder: false };
+  const ask = askFor('product', cleared, offer);
+  const options = ask.buttons ?? [];
+  return outcome('collecting', { ...cleared, expecting: 'product' }, [
+    {
+      text: options.length
+        ? `${message} ${ask.text}`
+        : `${message} No momento não temos outro botijão. Quer falar com um atendente?`,
+      buttons: [...options, { id: 'human', label: 'Falar com atendente' }],
+    },
+  ]);
 }
 
 /**

@@ -16,6 +16,7 @@ import {
   loadOffer,
   misunderstood,
   outcome,
+  outOfStock,
   type StepHandler,
   type TurnContext,
 } from './handler.js';
@@ -24,7 +25,7 @@ import {
 export const confirmingHandler: StepHandler = async (state, signal, ctx) => {
   if (signal.intent === 'cancel') return canceledBeforeSale(state.draft);
 
-  const offer = await loadOffer(ctx.revgas);
+  const offer = await loadOffer(ctx);
 
   if (signal.button?.startsWith('change:')) {
     return advance(clearField(state.draft, signal.button), offer, []);
@@ -43,10 +44,38 @@ export const confirmingHandler: StepHandler = async (state, signal, ctx) => {
     );
   }
 
+  // Quer mudar algo, mas sem dizer para o quê ("quero outro"): mostra as
+  // opções em botões em vez de adivinhar (issue #9).
+  const field = CHANGE_INTENT_FIELD[signal.intent];
+  if (field) {
+    return advance(
+      clearField(state.draft, `change:${field}`),
+      offer,
+      applied.notices,
+    );
+  }
+
+  // Entendeu, mas não pôde aplicar (ex.: quantidade acima do estoque):
+  // explica e mostra o resumo de novo, sem contar como "não entendi".
+  if (applied.notices.length > 0) {
+    const again = summary(state.draft, offer.paymentTypes);
+    return outcome('confirming', state.draft, [
+      { ...again, text: `${applied.notices.join(' ')}\n${again.text}` },
+    ]);
+  }
+
   if (signal.intent === 'confirm' || signal.intent === 'repeat_last') {
     return createSale(state.draft, ctx, offer);
   }
   return misunderstood(state, summary(state.draft, offer.paymentTypes));
+};
+
+const CHANGE_INTENT_FIELD: Partial<
+  Record<string, 'product' | 'address' | 'payment'>
+> = {
+  change_product: 'product',
+  change_address: 'address',
+  change_payment: 'payment',
 };
 
 async function createSale(
@@ -57,6 +86,20 @@ async function createSale(
   const { item, address, payment, customer } = draft;
   if (!item || !address || !payment || !customer) {
     return advance(draft, offer, []);
+  }
+
+  // Estoque conferido pelo código antes de confirmar, sem cache (issue #9).
+  // Vem antes do cadastro, para não criar cliente de um pedido que não sai.
+  const stock = await ctx.catalog.freshStock(item.productId);
+  if (stock < item.quantity) {
+    ctx.catalog.invalidate();
+    return outOfStock(
+      draft,
+      await loadOffer(ctx),
+      stock > 0
+        ? `Só temos ${stock} ${item.description} agora.`
+        : `O ${item.description} acabou agora.`,
+    );
   }
 
   // Cliente novo: cria o cadastro (com o endereço confirmado no resumo) e
@@ -121,11 +164,13 @@ async function createSale(
   } catch (error) {
     if (!(error instanceof RevgasError)) throw error;
     if (error.code === 'out_of_stock') {
-      const cleared = { ...draft, item: null, fromLastOrder: false };
-      const ask = askFor('product', cleared, offer);
-      return outcome('collecting', { ...cleared, expecting: 'product' }, [
-        { ...ask, text: `Esse produto acabou de esgotar. ${ask.text}` },
-      ]);
+      // Esgotou entre a consulta e a venda: recarrega e reabre as opções.
+      ctx.catalog.invalidate();
+      return outOfStock(
+        draft,
+        await loadOffer(ctx),
+        'Esse produto acabou de esgotar.',
+      );
     }
     if (error.code === 'payment_declined') {
       const cleared = { ...draft, payment: null };

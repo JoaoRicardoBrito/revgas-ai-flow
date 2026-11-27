@@ -10,8 +10,8 @@ const RECURRING = SEED.recurringCustomer.phone;
 const start: SessionState = { step: 'identifying', draft: emptyDraft() };
 
 function setup(contact: string = RECURRING) {
-  const { fake, revgas } = fakeRevgas();
-  return { fake, ctx: { revgas, contact } };
+  const { fake, revgas, catalog } = fakeRevgas();
+  return { fake, ctx: { revgas, catalog, contact } };
 }
 
 describe('cliente recorrente', () => {

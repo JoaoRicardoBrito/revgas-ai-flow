@@ -11,7 +11,7 @@ import {
 export const collectingHandler: StepHandler = async (state, signal, ctx) => {
   if (signal.intent === 'cancel') return canceledBeforeSale(state.draft);
 
-  const offer = await loadOffer(ctx.revgas);
+  const offer = await loadOffer(ctx);
   const applied = applySignal(state.draft, signal, offer);
   const progressed =
     JSON.stringify(applied.draft) !== JSON.stringify(state.draft);

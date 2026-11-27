@@ -22,7 +22,7 @@ export const identifyingHandler: StepHandler = async (state, signal, ctx) => {
   const recent = customer
     ? await ctx.revgas.listRecentSales(customer.id, RECENT_SALES)
     : [];
-  const offer = await loadOffer(ctx.revgas);
+  const offer = await loadOffer(ctx);
 
   const savedAddresses = distinctAddresses([
     ...recent.map((s) => s.address),

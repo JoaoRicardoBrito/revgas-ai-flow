@@ -2,19 +2,18 @@ import { findCpf, maskCpf } from '../common/cpf.js';
 import type { Address, PaymentType } from '../revgas/revgas.types.js';
 import {
   findBySize,
+  findRelative,
   matchPayment,
   offeredPayments,
   sellable,
   type CatalogProduct,
+  type Offer,
 } from './catalog.js';
 import type { Draft, Expecting, Reply, Signal } from './conversation.types.js';
 
 export type Field = 'product' | 'address' | 'payment' | 'name' | 'cpf';
 
-export interface Offer {
-  catalog: CatalogProduct[];
-  paymentTypes: PaymentType[];
-}
+export type { Offer };
 
 /**
  * Aplica ao rascunho o que veio no turno (texto extraído ou botão). Só
@@ -29,23 +28,54 @@ export function applySignal(
   const notices: string[] = [];
   const x = signal.extraction;
 
-  // Produto: botão `product:<id>` ou peso citado no texto.
+  // Produto: botão `product:<id>`, peso citado ou "um maior/menor".
   const buttonProductId = valueOf(signal.button, 'product');
-  const product = buttonProductId
-    ? sellable(offer.catalog).find((p) => p.id === Number(buttonProductId))
-    : x?.productSizeKg
-      ? findBySize(offer.catalog, x.productSizeKg)
-      : undefined;
-  if (x?.productSizeKg && !product) {
-    notices.push(`No momento não temos botijão de ${x.productSizeKg} kg.`);
+  let product: CatalogProduct | undefined;
+  if (buttonProductId) {
+    product = sellable(offer.catalog).find(
+      (p) => p.id === Number(buttonProductId),
+    );
+  } else if (x?.productSizeKg) {
+    product = findBySize(offer.catalog, x.productSizeKg);
+    if (!product) {
+      notices.push(`No momento não temos botijão de ${x.productSizeKg} kg.`);
+    }
+  } else if (x?.productRelative) {
+    const relative = findRelative(
+      offer.catalog,
+      next.item?.productId ?? null,
+      x.productRelative,
+    );
+    product = relative.product;
+    if (relative.reason === 'no_reference') {
+      notices.push('Qual tamanho você quer?');
+    } else if (relative.reason === 'none_in_direction') {
+      notices.push(
+        x.productRelative === 'bigger'
+          ? 'Esse já é o maior que temos agora.'
+          : 'Esse já é o menor que temos agora.',
+      );
+    }
   }
-  if (product && product.unitValue !== null) {
+
+  // O código confere a quantidade contra o estoque; o LLM não sabe estoque.
+  const quantity = x?.quantity ?? next.item?.quantity ?? 1;
+  const target =
+    product ?? offer.catalog.find((p) => p.id === next.item?.productId);
+  const exceedsStock = target !== undefined && quantity > target.stockQuantity;
+  if ((product || x?.quantity) && exceedsStock) {
+    notices.push(
+      target.stockQuantity > 0
+        ? `Só temos ${target.stockQuantity} ${target.description} agora.`
+        : `O ${target.description} acabou agora.`,
+    );
+  } else if (product && product.unitValue !== null) {
     const keepLastPrice =
       next.fromLastOrder && next.item?.productId === product.id;
     next.item = {
       productId: product.id,
       description: product.description,
-      quantity: x?.quantity ?? next.item?.quantity ?? 1,
+      quantity,
       unitValue:
         keepLastPrice && next.item ? next.item.unitValue : product.unitValue,
     };

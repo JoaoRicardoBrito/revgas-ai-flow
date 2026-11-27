@@ -42,6 +42,14 @@ A tabela fica em [`transitions.ts`](../src/conversation/transitions.ts). Qualque
 - **Cadastro com confirmação:** o resumo mostra o nome e avisa que o cadastro e o endereço ficam salvos. O cliente só é criado na RevGás depois do Confirmar. Se a venda falhar logo depois, o ID já criado é mantido, para a nova tentativa não duplicar o cadastro.
 - **Endereço novo de cliente antigo:** depois da venda, o bot pergunta se salva o endereço no cadastro (Salvar / Agora não). O `PUT` reenvia o cadastro atual inteiro, trocando só o endereço.
 
+## Catálogo, preço e estoque (issue #9)
+
+- **Catálogo:** produtos e formas de pagamento vêm da API, com cache de `CATALOG_CACHE_SECONDS` (padrão 120). Turnos simultâneos esperam a mesma carga.
+- **Preço:** a API da RevGás não tem preço de produto. A revenda configura `PRODUCT_PRICES=P13:120,P20:180` (decimal com ponto). Sem tabela, o mock usa preços de demonstração e o modo real não vende nada, para o bot nunca inventar preço.
+- **"Um maior" / "um menor":** o próximo tamanho à venda a partir do produto atual, pulando o que está sem estoque. Sem produto atual, ou "quero outro" sem dizer qual, mostra os produtos em botões.
+- **Estoque:** a quantidade é conferida contra o estoque ao escolher. No Confirmar, o código consulta o estoque na API, sem cache, antes do cadastro e da venda.
+- **Sem estoque:** oferece os outros produtos à venda e o atendente; nunca cria a venda. Se a RevGás recusar a venda por estoque, o cache é descartado e as opções são reabertas. Com mais de 3 opções, o canal mostra lista (WhatsApp, #18).
+
 ## Regras de qualquer etapa
 
 - **Atendente:** pedir atendente encerra com passagem (handoff). Depois disso o bot só registra as mensagens, sem responder, até a sessão expirar.
@@ -60,9 +68,7 @@ A tabela fica em [`transitions.ts`](../src/conversation/transitions.ts). Qualque
 
 | Ponto | Hoje | Issue |
 |-------|------|-------|
-| Preço | Último pedido para o recorrente; tabela fictícia por peso para o resto, porque a API não tem preço | #9, pergunta 2 da #1 |
-| Catálogo | Consultado a cada turno, sem cache | #9 |
-| "Um maior" / "um menor" | Mostra os produtos em botões | #9 |
+| Preço | `PRODUCT_PRICES` configurado pela revenda (a API não tem preço); recorrente paga o do último pedido. Sem tabela: demonstração no mock, nada à venda no modo real | pergunta 2 da #1 |
 | Pagamento | Botões com todas as formas aceitas, menos fiado e vale gás | #10 |
 | Endereço | Até 3 conhecidos (últimas vendas + cadastro) em botões, ou digitado; sem cobertura nem localização | #11 |
 | Cancelamento | Usa o primeiro motivo cadastrado | #12 |

@@ -72,7 +72,7 @@ beforeEach(async () => {
 });
 
 function setup(options: { cpfRequired?: boolean } = {}) {
-  const { fake, revgas } = fakeRevgas();
+  const { fake, revgas, catalog } = fakeRevgas();
   const llm = new LookupLlm({
     'quero um P13 na rua nova 45, fátima, no pix, sou Ana Teste': {
       productSizeKg: 13,
@@ -94,6 +94,7 @@ function setup(options: { cpfRequired?: boolean } = {}) {
     store,
     new MessageExtractor(llm),
     revgas,
+    catalog,
     { ttlMs: TTL_MS, cpfRequired: options.cpfRequired ?? false },
   );
   let seq = 0;

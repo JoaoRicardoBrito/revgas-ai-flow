@@ -6,6 +6,7 @@ import { findCpf, isValidCpf, maskCpf } from '../common/cpf.js';
 import type { Conversation } from '../database/schema.js';
 import { EXPECTING, type MessageExtractor } from '../llm/message-extractor.js';
 import type { RevgasClient } from '../revgas/revgas-client.js';
+import type { Catalog } from './catalog.js';
 import {
   draftSchema,
   emptyDraft,
@@ -64,6 +65,7 @@ export class ConversationService {
     private readonly store: ConversationStore,
     private readonly extractor: MessageExtractor,
     private readonly revgas: RevgasClient,
+    private readonly catalog: Catalog,
     private readonly options: ConversationServiceOptions,
   ) {}
 
@@ -175,6 +177,7 @@ export class ConversationService {
 
     const result = await runTurn(state, signal, {
       revgas: this.revgas,
+      catalog: this.catalog,
       contact,
       settings: { cpfRequired: this.options.cpfRequired ?? false },
     });
