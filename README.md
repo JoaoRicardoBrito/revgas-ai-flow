@@ -31,7 +31,7 @@ cp .env.example .env   # opcional: sem .env, sobe em modo mock com valores padr�
 npm run start:dev      # http://localhost:3000/health
 ```
 
-Com `REVGAS_USE_MOCK=true` (padrão) nada é enviado à API real da RevGás. A configuração é validada na subida; se faltar ou sobrar algo, a aplicação não sobe e lista as variáveis com problema, sem mostrar os valores.
+Com `REVGAS_USE_MOCK=true` (padrão) nada é enviado à API real da RevGás. Sem `DATABASE_URL`, o banco é um PGlite em memória, já migrado; com ela, rode `npm run db:migrate` antes da primeira subida. A configuração é validada na subida; se faltar ou sobrar algo, a aplicação não sobe e lista as variáveis com problema, sem mostrar os valores.
 
 | Comando | O que faz |
 |---------|-----------|
@@ -40,6 +40,9 @@ Com `REVGAS_USE_MOCK=true` (padrão) nada é enviado à API real da RevGás. A c
 | `npm run lint` | oxlint com regras que usam tipos |
 | `npm run format` | Prettier |
 | `npm run build` | Compila para `dist/` |
+| `npm run db:generate` | Gera a migration SQL a partir de `src/database/schema.ts` |
+| `npm run db:migrate` | Aplica as migrations no `DATABASE_URL` (Supabase) |
+| `npm run db:check` | Falha se o schema mudou sem migration (roda no CI) |
 
 ## Segurança
 
