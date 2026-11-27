@@ -54,7 +54,7 @@ export const conversations = pgTable(
     contact: text('contact').notNull(),
     status: conversationStatus('status').notNull().default('active'),
     /** Etapa da máquina de estados (issue #6). */
-    step: text('step').notNull().default('start'),
+    step: text('step').notNull().default('identifying'),
     /** Dados já coletados no pedido. Pode conter endereço: não logar. */
     collected: jsonb('collected')
       .$type<Record<string, unknown>>()

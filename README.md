@@ -15,7 +15,7 @@ Hoje um pedido leva cerca de **5 minutos**. O objetivo é reduzir esse tempo ao 
 
 ## Decisões
 
-O que queremos resolver está no [PRD](docs/PRD.md). As decisões de arquitetura ficam em [`docs/adr`](docs/adr). Comece pela [ADR 0001](docs/adr/0001-arquitetura-do-prototipo.md).
+O que queremos resolver está no [PRD](docs/PRD.md). O fluxo da conversa está em [docs/conversa.md](docs/conversa.md). As decisões de arquitetura ficam em [`docs/adr`](docs/adr). Comece pela [ADR 0001](docs/adr/0001-arquitetura-do-prototipo.md).
 
 ## Stack
 

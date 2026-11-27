@@ -189,4 +189,130 @@ export class ConversationStore {
       .where(eq(orderMetrics.conversationId, conversationId));
     return row;
   }
+
+  /** Conversa do contato passada a um atendente desde `since`, se houver. */
+  async findRecentHandedOff(
+    channel: Channel,
+    contact: string,
+    since: Date,
+  ): Promise<Conversation | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.channel, channel),
+          eq(conversations.contact, contact),
+          eq(conversations.status, 'handed_off'),
+          sql`${conversations.updatedAt} >= ${since.toISOString()}::timestamptz`,
+        ),
+      )
+      .orderBy(sql`${conversations.updatedAt} DESC`)
+      .limit(1);
+    return row;
+  }
+
+  async getConversation(id: string): Promise<Conversation | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, id));
+    return row;
+  }
+
+  /** Grava a etapa e o rascunho depois de cada turno. */
+  async saveState(
+    conversationId: string,
+    state: {
+      step: string;
+      collected: Record<string, unknown>;
+      revgasCustomerId?: number | null;
+    },
+    at: Date,
+  ): Promise<void> {
+    await this.db
+      .update(conversations)
+      .set({
+        step: state.step,
+        collected: state.collected,
+        ...(state.revgasCustomerId !== undefined
+          ? { revgasCustomerId: state.revgasCustomerId }
+          : {}),
+        updatedAt: at,
+      })
+      .where(eq(conversations.id, conversationId));
+  }
+
+  /** Encerra a conversa; a próxima mensagem do contato abre outra. */
+  async closeConversation(
+    conversationId: string,
+    status: 'completed' | 'abandoned',
+    at: Date,
+  ): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(conversations)
+        .set({ status, step: 'closed', updatedAt: at })
+        .where(eq(conversations.id, conversationId));
+      if (status === 'abandoned') {
+        await tx
+          .update(orderMetrics)
+          .set({ outcome: 'abandoned' })
+          .where(
+            and(
+              eq(orderMetrics.conversationId, conversationId),
+              eq(orderMetrics.outcome, 'in_progress'),
+            ),
+          );
+      }
+    });
+  }
+
+  /** Pedido cancelado pelo cliente (antes ou depois da venda). */
+  async markCanceled(conversationId: string, at: Date): Promise<void> {
+    await this.db
+      .update(orderMetrics)
+      .set({
+        outcome: 'canceled',
+        canceledAt: sql`COALESCE(${orderMetrics.canceledAt}, ${at.toISOString()}::timestamptz)`,
+      })
+      .where(eq(orderMetrics.conversationId, conversationId));
+  }
+
+  async addLlmTime(conversationId: string, ms: number): Promise<void> {
+    await this.db
+      .update(orderMetrics)
+      .set({
+        llmMs: sql`${orderMetrics.llmMs} + ${Math.max(0, Math.round(ms))}`,
+      })
+      .where(eq(orderMetrics.conversationId, conversationId));
+  }
+
+  /**
+   * Encerra conversas ativas paradas desde antes de `cutoff`: sem venda,
+   * abandono; com venda, concluída. Devolve quantas foram encerradas.
+   */
+  async expireIdle(cutoff: Date, at: Date): Promise<number> {
+    const idle = await this.db
+      .select({
+        id: conversations.id,
+        saleCreatedAt: orderMetrics.saleCreatedAt,
+      })
+      .from(conversations)
+      .leftJoin(orderMetrics, eq(orderMetrics.conversationId, conversations.id))
+      .where(
+        and(
+          eq(conversations.status, 'active'),
+          sql`${conversations.lastMessageAt} < ${cutoff.toISOString()}::timestamptz`,
+        ),
+      );
+    for (const row of idle) {
+      await this.closeConversation(
+        row.id,
+        row.saleCreatedAt ? 'completed' : 'abandoned',
+        at,
+      );
+    }
+    return idle.length;
+  }
 }
