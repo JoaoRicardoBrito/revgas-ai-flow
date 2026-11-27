@@ -26,7 +26,8 @@
     "test:contract:real": "REVGAS_CONTRACT_REAL=true vitest run src/revgas/http/http-revgas-client.real.spec.ts --testTimeout=30000",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:check": "drizzle-kit generate && git diff --exit-code -- drizzle && test -z \"$(git ls-files --others --exclude-standard -- drizzle)\""
+    "db:check": "drizzle-kit generate && git diff --exit-code -- drizzle && test -z \"$(git ls-files --others --exclude-standard -- drizzle)\"",
+    "test:llm:live": "GROQ_LIVE=true vitest run src/llm/groq/groq-llm-client.live.spec.ts --testTimeout=30000"
   },
   "repository": {
     "type": "git",

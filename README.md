@@ -43,6 +43,8 @@ Com `REVGAS_USE_MOCK=true` (padrão) nada é enviado à API real da RevGás. Sem
 | `npm run db:generate` | Gera a migration SQL a partir de `src/database/schema.ts` |
 | `npm run db:migrate` | Aplica as migrations no `DATABASE_URL` (Supabase) |
 | `npm run db:check` | Falha se o schema mudou sem migration (roda no CI) |
+| `npm run test:llm:live` | Extração contra o Groq real (gasta cota; precisa de `GROQ_API_KEY`) |
+| `npm run test:contract:real` | Contrato de leitura contra a API real da RevGás |
 
 ## Segurança
 
