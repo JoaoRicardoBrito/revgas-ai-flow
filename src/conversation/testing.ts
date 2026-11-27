@@ -7,10 +7,12 @@ import {
   FakeRevgasApi,
 } from '../revgas/fake/fake-revgas-api.js';
 import { HttpRevgasClient } from '../revgas/http/http-revgas-client.js';
+import { Catalog, DEMO_PRICES_BY_KG, type CatalogOptions } from './catalog.js';
 import type { Signal } from './conversation.types.js';
 import { signalFromButton } from './state-machine.js';
 
-export function fakeRevgas() {
+/** Fake da RevGás com client e catálogo (sem cache, preços de demonstração). */
+export function fakeRevgas(catalogOptions: Partial<CatalogOptions> = {}) {
   const fake = new FakeRevgasApi();
   const revgas = new HttpRevgasClient({
     baseUrl: FAKE_BASE_URL,
@@ -19,7 +21,12 @@ export function fakeRevgas() {
     fetch: fake.fetch,
     minIntervalMs: 0,
   });
-  return { fake, revgas };
+  const catalog = new Catalog(revgas, {
+    prices: DEMO_PRICES_BY_KG,
+    ttlMs: 0,
+    ...catalogOptions,
+  });
+  return { fake, revgas, catalog };
 }
 
 export const NO_DATA: Extraction = {
@@ -45,6 +52,7 @@ export function said(
     button: null,
     llmUnavailable: false,
     text,
+    location: null,
   };
 }
 
@@ -57,6 +65,7 @@ export const NOT_UNDERSTOOD: Signal = {
   button: null,
   llmUnavailable: true,
   text: null,
+  location: null,
 };
 
 export const fullAddress = {

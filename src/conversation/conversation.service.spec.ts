@@ -72,7 +72,7 @@ beforeEach(async () => {
 });
 
 function setup(options: { cpfRequired?: boolean } = {}) {
-  const { fake, revgas } = fakeRevgas();
+  const { fake, revgas, catalog } = fakeRevgas();
   const llm = new LookupLlm({
     'quero um P13 na rua nova 45, fátima, no pix, sou Ana Teste': {
       productSizeKg: 13,
@@ -81,6 +81,7 @@ function setup(options: { cpfRequired?: boolean } = {}) {
       customerName: 'Ana Teste',
     },
     'quero um P13, cpf [cpf]': { productSizeKg: 13 },
+    'Rua Nova, 45 - Fátima': { intent: 'change_address', address: fullAddress },
     'o mesmo de sempre': { intent: 'repeat_last' },
     'quero um P13 na rua nova 45, fátima, no pix': {
       productSizeKg: 13,
@@ -94,12 +95,13 @@ function setup(options: { cpfRequired?: boolean } = {}) {
     store,
     new MessageExtractor(llm),
     revgas,
+    catalog,
     { ttlMs: TTL_MS, cpfRequired: options.cpfRequired ?? false },
   );
   let seq = 0;
   const send = (
     contact: string,
-    content: { text?: string; buttonId?: string },
+    content: Pick<IncomingMessage, 'text' | 'buttonId' | 'location'>,
     when: Date,
   ) => {
     const message: IncomingMessage = {
@@ -381,5 +383,46 @@ describe('ConversationService: CPF (issue #8)', () => {
     expect(JSON.stringify(conversation?.collected)).not.toContain(
       '52998224725',
     );
+  });
+});
+
+describe('ConversationService: localização (issue #11)', () => {
+  it('localização com endereço escrito passa pelo extrator e grava só o marcador', async () => {
+    const { send, llm } = setup();
+    const phone = '5586933332222';
+    await send(phone, { text: 'Ana Teste' }, at(0)).result;
+
+    await send(
+      phone,
+      {
+        location: {
+          latitude: -5.09,
+          longitude: -42.8,
+          address: 'Rua Nova, 45 - Fátima',
+        },
+      },
+      at(10),
+    ).result;
+
+    expect(llm.sent.join('\n')).toContain('Rua Nova, 45 - Fátima');
+    const stored = await bodies();
+    expect(stored).toContain('[localização]');
+    expect(stored.join('\n')).not.toMatch(/-5\.09|-42\.8/);
+  });
+
+  it('localização sem endereço não chama o LLM', async () => {
+    const { send, llm } = setup();
+    const phone = '5586933331111';
+    await send(phone, { text: 'Ana Teste' }, at(0)).result;
+    const before = llm.calls;
+
+    const result = await send(
+      phone,
+      { location: { latitude: -5.09, longitude: -42.8 } },
+      at(10),
+    ).result;
+
+    expect(llm.calls).toBe(before);
+    expect(result.replies[0]?.text).toMatch(/Recebi sua localização/);
   });
 });

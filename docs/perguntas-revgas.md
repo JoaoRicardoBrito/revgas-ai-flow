@@ -25,6 +25,7 @@ Cada pergunta tem a suposição que usamos **até a resposta chegar**, para o de
 | 10 | Podem gerar uma chave de API nova e revogar a anterior? | A chave anterior foi exposta | Nenhuma chamada real até termos a chave nova | #19 |
 | 11 | Existe rota para criar cliente? `POST /customers` está correto? | O caminho foi inferido, não está na documentação | Rota `POST /customers` com nome, telefone e endereço | #3, #8 |
 | 12 | A listagem de vendas filtra por cliente (ou telefone)? | É assim que obtemos "o mesmo de sempre" | Filtro por cliente existe; usamos a venda mais recente | #3, #7 |
+| 13 | Como a revenda indica quem pode comprar fiado ou com vale gás? | Essas formas só aparecem para clientes autorizados (PRD 6.2) | Fiado: `credit_limit` maior que zero. Vale gás: categoria do cliente com "vale gás" no nome | #10 |
 
 As perguntas 11 e 12 vêm da ADR 0001 e ainda não estão na lista da issue #1.
 
@@ -59,6 +60,10 @@ Somos o time do projeto de extensão do iCEV que está construindo o atendente c
 
 12. A chave de API que recebemos acabou exposta. Podem revogá-la e gerar uma nova? Até lá, não fazemos nenhuma chamada ao sistema real.
 
+**Sobre pagamento**
+
+13. Como vocês indicam quais clientes podem comprar fiado ou com vale gás? Usamos o limite de crédito do cadastro para fiado e a categoria do cliente para vale gás. Está certo?
+
 Obrigado!
 Equipe RevGás AI Flow, iCEV
 
@@ -84,3 +89,4 @@ Respostas parciais vieram da [documentação pública](revgas-api.md) em 2026-11
 | 10 | | | |
 | 11 | Sim (docs): `POST /customers`; nenhum campo marcado como obrigatório | 2026-11-27 | Enviamos `name`, `type: PHYSICAL`, `phones` e endereço |
 | 12 | Sim (docs): `GET /sales?customer_id=`, mais recente primeiro, janela máxima de 366 dias | 2026-11-27 | `findLastSale` usa os últimos 365 dias |
+| 13 | | | |

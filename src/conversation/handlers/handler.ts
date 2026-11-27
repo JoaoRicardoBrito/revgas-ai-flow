@@ -1,5 +1,6 @@
 import type { RevgasClient } from '../../revgas/revgas-client.js';
-import { loadCatalog } from '../catalog.js';
+import type { Catalog } from '../catalog.js';
+import type { Coverage } from '../coverage.js';
 import type {
   Draft,
   Reply,
@@ -20,6 +21,8 @@ import {
 
 export interface TurnContext {
   revgas: RevgasClient;
+  /** Produtos, preços e formas de pagamento, com cache. */
+  catalog: Catalog;
   /** Telefone (ou ID do simulador) de quem escreve. */
   contact: string;
   settings?: ConversationSettings;
@@ -31,6 +34,13 @@ export interface ConversationSettings {
    * opcional, então o padrão é não pedir (CPF_REQUIRED).
    */
   cpfRequired: boolean;
+  /**
+   * Manda o Pix copia e cola fictício depois da venda. Só no modo mock:
+   * cliente real nunca recebe código de demonstração.
+   */
+  pixDemo?: boolean;
+  /** Área de entrega (COVERAGE_*). */
+  coverage?: Coverage;
 }
 
 export type StepHandler = (
@@ -49,12 +59,30 @@ export function outcome(
   return { step, draft, replies, events };
 }
 
-export async function loadOffer(revgas: RevgasClient): Promise<Offer> {
-  const [catalog, paymentTypes] = [
-    await loadCatalog(revgas),
-    await revgas.listPaymentTypes(),
-  ];
-  return { catalog, paymentTypes };
+export async function loadOffer(ctx: TurnContext): Promise<Offer> {
+  return { ...(await ctx.catalog.offer()), coverage: ctx.settings?.coverage };
+}
+
+/**
+ * Sem estoque (issue #9): oferece os outros produtos à venda e o atendente.
+ * Nunca segue para a venda. Mais de 3 opções o canal mostra como lista.
+ */
+export function outOfStock(
+  draft: Draft,
+  offer: Offer,
+  message: string,
+): TurnOutcome {
+  const cleared: Draft = { ...draft, item: null, fromLastOrder: false };
+  const ask = askFor('product', cleared, offer);
+  const options = ask.buttons ?? [];
+  return outcome('collecting', { ...cleared, expecting: 'product' }, [
+    {
+      text: options.length
+        ? `${message} ${ask.text}`
+        : `${message} No momento não temos outro botijão. Quer falar com um atendente?`,
+      buttons: [...options, { id: 'human', label: 'Falar com atendente' }],
+    },
+  ]);
 }
 
 /**
@@ -97,6 +125,27 @@ export function advance(
     [{ ...reply, text: prefix + reply.text }],
     events,
   );
+}
+
+/**
+ * Endereço fora da área de entrega (issue #11): não aceita o endereço,
+ * oferece os salvos que são atendidos ou o atendente.
+ */
+export function outsideCoverage(
+  draft: Draft,
+  offer: Offer,
+  notices: string[],
+): TurnOutcome {
+  const ask = askFor('address', { ...draft, pendingLocation: null }, offer);
+  return outcome('collecting', { ...draft, expecting: 'address' }, [
+    {
+      text: `${notices.join(' ')}\nPode me passar outro endereço? Se preferir, chamo um atendente.`,
+      buttons: [
+        ...(ask.buttons ?? []),
+        { id: 'human', label: 'Falar com atendente' },
+      ],
+    },
+  ]);
 }
 
 /** Não entendeu: repete a pergunta com botões; na segunda vez, atendente. */

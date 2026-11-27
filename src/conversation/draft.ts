@@ -2,19 +2,19 @@ import { findCpf, maskCpf } from '../common/cpf.js';
 import type { Address, PaymentType } from '../revgas/revgas.types.js';
 import {
   findBySize,
+  findRelative,
   matchPayment,
   offeredPayments,
   sellable,
   type CatalogProduct,
+  type Offer,
 } from './catalog.js';
 import type { Draft, Expecting, Reply, Signal } from './conversation.types.js';
+import { isCovered, NO_COVERAGE_RULES } from './coverage.js';
 
 export type Field = 'product' | 'address' | 'payment' | 'name' | 'cpf';
 
-export interface Offer {
-  catalog: CatalogProduct[];
-  paymentTypes: PaymentType[];
-}
+export type { Offer };
 
 /**
  * Aplica ao rascunho o que veio no turno (texto extraído ou botão). Só
@@ -24,28 +24,59 @@ export function applySignal(
   draft: Draft,
   signal: Signal,
   offer: Offer,
-): { draft: Draft; notices: string[] } {
+): { draft: Draft; notices: string[]; outsideCoverage: boolean } {
   const next: Draft = { ...draft };
   const notices: string[] = [];
   const x = signal.extraction;
 
-  // Produto: botão `product:<id>` ou peso citado no texto.
+  // Produto: botão `product:<id>`, peso citado ou "um maior/menor".
   const buttonProductId = valueOf(signal.button, 'product');
-  const product = buttonProductId
-    ? sellable(offer.catalog).find((p) => p.id === Number(buttonProductId))
-    : x?.productSizeKg
-      ? findBySize(offer.catalog, x.productSizeKg)
-      : undefined;
-  if (x?.productSizeKg && !product) {
-    notices.push(`No momento não temos botijão de ${x.productSizeKg} kg.`);
+  let product: CatalogProduct | undefined;
+  if (buttonProductId) {
+    product = sellable(offer.catalog).find(
+      (p) => p.id === Number(buttonProductId),
+    );
+  } else if (x?.productSizeKg) {
+    product = findBySize(offer.catalog, x.productSizeKg);
+    if (!product) {
+      notices.push(`No momento não temos botijão de ${x.productSizeKg} kg.`);
+    }
+  } else if (x?.productRelative) {
+    const relative = findRelative(
+      offer.catalog,
+      next.item?.productId ?? null,
+      x.productRelative,
+    );
+    product = relative.product;
+    if (relative.reason === 'no_reference') {
+      notices.push('Qual tamanho você quer?');
+    } else if (relative.reason === 'none_in_direction') {
+      notices.push(
+        x.productRelative === 'bigger'
+          ? 'Esse já é o maior que temos agora.'
+          : 'Esse já é o menor que temos agora.',
+      );
+    }
   }
-  if (product && product.unitValue !== null) {
+
+  // O código confere a quantidade contra o estoque; o LLM não sabe estoque.
+  const quantity = x?.quantity ?? next.item?.quantity ?? 1;
+  const target =
+    product ?? offer.catalog.find((p) => p.id === next.item?.productId);
+  const exceedsStock = target !== undefined && quantity > target.stockQuantity;
+  if ((product || x?.quantity) && exceedsStock) {
+    notices.push(
+      target.stockQuantity > 0
+        ? `Só temos ${target.stockQuantity} ${target.description} agora.`
+        : `O ${target.description} acabou agora.`,
+    );
+  } else if (product && product.unitValue !== null) {
     const keepLastPrice =
       next.fromLastOrder && next.item?.productId === product.id;
     next.item = {
       productId: product.id,
       description: product.description,
-      quantity: x?.quantity ?? next.item?.quantity ?? 1,
+      quantity,
       unitValue:
         keepLastPrice && next.item ? next.item.unitValue : product.unitValue,
     };
@@ -53,28 +84,50 @@ export function applySignal(
     next.item = { ...next.item, quantity: x.quantity };
   }
 
-  // Endereço: completo no texto, ou o salvo por botão.
+  // Endereço: digitado, salvo (botão) ou localização do WhatsApp (issue #11).
+  // A localização sozinha não diz rua e número: guardamos o ponto para o
+  // entregador e pedimos o resto.
+  if (signal.location) {
+    next.pendingLocation = signal.location;
+  }
   const a = x?.address;
+  let candidate: Address | undefined;
   if (a?.street && a.number && a.neighborhood) {
-    next.address = {
+    candidate = {
       street: a.street,
       number: a.number,
       neighborhood: a.neighborhood,
       ...(a.complement ? { complement: a.complement } : {}),
       ...(a.landmark ? { landmark: a.landmark } : {}),
     };
+    const point = next.pendingLocation;
+    if (point) {
+      candidate.latitude = String(point.latitude);
+      candidate.longitude = String(point.longitude);
+    }
   } else if (a?.street || a?.number || a?.neighborhood) {
     notices.push('Preciso da rua, do número e do bairro.');
+  } else if (signal.location) {
+    notices.push('Recebi sua localização.');
   }
   const savedIndex = valueOf(signal.button, 'address');
-  const saved =
-    savedIndex === null
-      ? undefined
-      : next.customer?.savedAddresses[Number(savedIndex)];
-  if (saved) next.address = saved;
+  if (savedIndex !== null) {
+    candidate = next.customer?.savedAddresses[Number(savedIndex)] ?? candidate;
+  }
+  let outsideCoverage = false;
+  if (candidate) {
+    if (isCovered(candidate, offer.coverage ?? NO_COVERAGE_RULES)) {
+      next.address = candidate;
+      next.pendingLocation = null;
+    } else {
+      outsideCoverage = true;
+      notices.push(`Ainda não entregamos em ${candidate.neighborhood}.`);
+    }
+  }
 
-  // Pagamento: botão `payment:<código>` ou forma citada no texto.
-  const accepted = offeredPayments(offer.paymentTypes);
+  // Pagamento: botão `payment:<código>` ou forma citada no texto. Só as
+  // que este cliente pode usar (fiado e vale gás com autorização).
+  const accepted = paymentOptions(next, offer);
   const buttonPayment = valueOf(signal.button, 'payment');
   const payment = buttonPayment
     ? accepted.find((t) => t.code === buttonPayment)?.code
@@ -82,9 +135,14 @@ export function applySignal(
       ? matchPayment(x.paymentMethod, accepted)
       : undefined;
   if (x?.paymentMethod && !payment) {
-    notices.push('Essa forma de pagamento não é aceita aqui.');
+    notices.push(
+      'Essa forma de pagamento não está disponível para este pedido.',
+    );
   }
   if (payment) next.payment = payment;
+  // Troco só existe para dinheiro; pode vir junto ou numa mensagem depois.
+  next.changeFor =
+    next.payment === 'MONEY' ? (x?.changeFor ?? next.changeFor) : null;
 
   // Nome: só para cliente novo.
   if (x?.customerName && next.customer && next.customer.id === null) {
@@ -104,7 +162,7 @@ export function applySignal(
     }
   }
 
-  return { draft: next, notices };
+  return { draft: next, notices, outsideCoverage };
 }
 
 /** Tudo o que falta, na ordem do PRD. Vazio = pronto para o resumo. */
@@ -166,28 +224,41 @@ export function askFor(field: Field, draft: Draft, offer: Offer): Reply {
         })),
       };
     case 'address': {
-      const saved = draft.customer?.savedAddresses ?? [];
+      if (draft.pendingLocation) {
+        return {
+          text: 'Para o entregador achar, me diga a rua, o número e o bairro.',
+        };
+      }
+      // Só endereços salvos dentro da área de entrega; o índice do botão é
+      // o da lista salva, para o toque continuar valendo.
+      const saved = (draft.customer?.savedAddresses ?? [])
+        .map((address, index) => ({ address, index }))
+        .filter(({ address }) =>
+          isCovered(address, offer.coverage ?? NO_COVERAGE_RULES),
+        );
       if (saved.length === 0) {
-        return { text: 'Qual o endereço de entrega? Rua, número e bairro.' };
+        return {
+          text: 'Qual o endereço de entrega? Rua, número e bairro, ou mande a localização.',
+        };
       }
       const list = saved
         .map(
-          (a, i) =>
-            `${i + 1}. ${formatAddress(a)}${a.complement ? ` (${a.complement})` : ''}`,
+          ({ address: a }, n) =>
+            `${n + 1}. ${formatAddress(a)}${a.complement ? ` (${a.complement})` : ''}`,
         )
         .join('\n');
       return {
-        text: `Onde entrego?\n${list}\nSe for outro, me diga rua, número e bairro.`,
-        buttons: saved.map((a, i) => ({
-          id: `address:${i}`,
-          label: buttonLabel(`${i + 1}. ${a.street}, ${a.number}`),
+        text: `Onde entrego?\n${list}\nSe for outro, me diga rua, número e bairro, ou mande a localização.`,
+        buttons: saved.map(({ address: a, index }, n) => ({
+          id: `address:${index}`,
+          label: buttonLabel(`${n + 1}. ${a.street}, ${a.number}`),
         })),
       };
     }
     case 'payment':
       return {
         text: 'Como você vai pagar? O pagamento é na entrega.',
-        buttons: offeredPayments(offer.paymentTypes).map((t) => ({
+        buttons: paymentOptions(draft, offer).map((t) => ({
           id: `payment:${t.code}`,
           label: t.description,
         })),
@@ -226,6 +297,9 @@ export function summary(
       : '',
     draft.address ? `Entrega: ${formatAddress(draft.address)}` : '',
     `Pagamento na entrega: ${payment ?? ''}`,
+    draft.payment === 'MONEY' && draft.changeFor
+      ? `Troco para ${money(draft.changeFor)}`
+      : '',
     `Total: ${money(total(draft))}`,
     isNew
       ? 'Ao confirmar, seu cadastro e este endereço ficam salvos para os próximos pedidos.'
@@ -322,3 +396,12 @@ function valueOf(button: string | null, prefix: string): string | null {
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Formas que este cliente pode escolher agora, na ordem de exibição. */
+export function paymentOptions(draft: Draft, offer: Offer): PaymentType[] {
+  return offeredPayments(offer.paymentTypes, {
+    authorized: draft.customer?.authorizedPayments ?? [],
+    exclude: draft.declinedPayments,
+    preferred: draft.customer?.lastPayment ?? null,
+  });
+}

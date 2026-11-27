@@ -1,7 +1,15 @@
-import { offeredPayments, sellable } from '../catalog.js';
+import { authorizedPaymentsFor, sellable } from '../catalog.js';
 import type { Draft } from '../conversation.types.js';
-import { applySignal, distinctAddresses } from '../draft.js';
-import { advance, loadOffer, type StepHandler } from './handler.js';
+import { applySignal, distinctAddresses, paymentOptions } from '../draft.js';
+import {
+  advance,
+  loadOffer,
+  outsideCoverage,
+  type StepHandler,
+} from './handler.js';
+import type { Offer } from '../catalog.js';
+import { isCovered, NO_COVERAGE_RULES } from '../coverage.js';
+import type { Address } from '../../revgas/revgas.types.js';
 
 /** Vendas olhadas para montar os endereços conhecidos. */
 const RECENT_SALES = 5;
@@ -22,7 +30,7 @@ export const identifyingHandler: StepHandler = async (state, signal, ctx) => {
   const recent = customer
     ? await ctx.revgas.listRecentSales(customer.id, RECENT_SALES)
     : [];
-  const offer = await loadOffer(ctx.revgas);
+  const offer = await loadOffer(ctx);
 
   const savedAddresses = distinctAddresses([
     ...recent.map((s) => s.address),
@@ -37,6 +45,8 @@ export const identifyingHandler: StepHandler = async (state, signal, ctx) => {
           savedAddresses,
           cpf: null,
           needsCpf: false,
+          authorizedPayments: authorizedPaymentsFor(customer),
+          lastPayment: recent[0]?.payments[0]?.code ?? null,
         }
       : {
           id: null,
@@ -45,6 +55,8 @@ export const identifyingHandler: StepHandler = async (state, signal, ctx) => {
           cpf: null,
           // CPF só se a nota exigir; cliente antigo já tem cadastro.
           needsCpf: ctx.settings?.cpfRequired ?? false,
+          authorizedPayments: [],
+          lastPayment: null,
         },
   };
 
@@ -56,7 +68,7 @@ export const identifyingHandler: StepHandler = async (state, signal, ctx) => {
       (p) => p.id === lastItem.productId,
     );
     const lastPayment = last.payments[0]?.code;
-    const paymentStillAccepted = offeredPayments(offer.paymentTypes).some(
+    const paymentStillAccepted = paymentOptions(draft, offer).some(
       (t) => t.code === lastPayment,
     );
     if (!product) {
@@ -67,15 +79,24 @@ export const identifyingHandler: StepHandler = async (state, signal, ctx) => {
     draft = {
       ...draft,
       item: product ? { ...lastItem, description: product.description } : null,
-      address: last.address ?? savedAddresses[0] ?? null,
+      address: deliverable(last.address ?? savedAddresses[0], offer, notices),
       payment: paymentStillAccepted && lastPayment ? lastPayment : null,
       fromLastOrder: Boolean(product),
     };
   } else if (customer) {
-    draft = { ...draft, address: savedAddresses[0] ?? null };
+    draft = {
+      ...draft,
+      address: deliverable(savedAddresses[0], offer, notices),
+    };
   }
 
   const applied = applySignal(draft, signal, offer);
+  if (applied.outsideCoverage) {
+    return outsideCoverage(applied.draft, offer, [
+      ...notices,
+      ...applied.notices,
+    ]);
+  }
   const firstName = customer?.name.split(' ')[0];
   const header = applied.draft.fromLastOrder
     ? `Oi${firstName ? `, ${firstName}` : ''}! Mesmo pedido de sempre?`
@@ -89,3 +110,18 @@ export const identifyingHandler: StepHandler = async (state, signal, ctx) => {
     header,
   );
 };
+
+/**
+ * Endereço do último pedido ou do cadastro, se ainda estiver na área de
+ * entrega. Fora dela, avisa e deixa o cliente escolher (issue #11).
+ */
+function deliverable(
+  address: Address | null | undefined,
+  offer: Offer,
+  notices: string[],
+): Address | null {
+  if (!address) return null;
+  if (isCovered(address, offer.coverage ?? NO_COVERAGE_RULES)) return address;
+  notices.push(`Ainda não entregamos em ${address.neighborhood}.`);
+  return null;
+}

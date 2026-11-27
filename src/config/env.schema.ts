@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isValidPriceList } from './price-list.js';
 
 /**
  * Variáveis de ambiente aceitas pela aplicação.
@@ -25,6 +26,34 @@ export const envSchema = z
     REVGAS_USE_MOCK: z.stringbool().default(true),
     /** A nota fiscal exige CPF de cliente novo. Na NFC-e é opcional. */
     CPF_REQUIRED: z.stringbool().default(false),
+    /**
+     * Preço por peso, ex.: "P13:120,P20:180". A API não tem preço de produto.
+     * Vazio: preços de demonstração no mock; nada à venda no modo real.
+     */
+    PRODUCT_PRICES: z
+      .string()
+      .optional()
+      .refine((v) => v === undefined || isValidPriceList(v), {
+        message: 'use o formato P13:120,P20:180',
+      }),
+    /** Bairros atendidos, separados por vírgula. Vazio: sem restrição por bairro. */
+    COVERAGE_NEIGHBORHOODS: z.string().optional(),
+    /** Ponto da loja para o raio de entrega: "latitude,longitude". */
+    COVERAGE_CENTER: z
+      .string()
+      .regex(/^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/, {
+        message: 'use latitude,longitude, ex.: -5.08,-42.80',
+      })
+      .optional(),
+    /** Raio de entrega em km a partir de COVERAGE_CENTER. */
+    COVERAGE_RADIUS_KM: z.coerce.number().positive().max(200).optional(),
+    /** Cache de produtos e formas de pagamento, em segundos. */
+    CATALOG_CACHE_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(3600)
+      .default(120),
     /** Revenda (estabelecimento) usada em produtos, pagamentos e vendas. */
     REVGAS_ESTABLISHMENT_ID: z.coerce.number().int().positive().optional(),
 
@@ -54,6 +83,16 @@ export const envSchema = z
           code: 'custom',
           path: ['REVGAS_ESTABLISHMENT_ID'],
           message: 'obrigatório quando REVGAS_USE_MOCK=false',
+        });
+      }
+
+      if (Boolean(env.COVERAGE_CENTER) !== Boolean(env.COVERAGE_RADIUS_KM)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [
+            env.COVERAGE_CENTER ? 'COVERAGE_RADIUS_KM' : 'COVERAGE_CENTER',
+          ],
+          message: 'COVERAGE_CENTER e COVERAGE_RADIUS_KM vão juntos',
         });
       }
 

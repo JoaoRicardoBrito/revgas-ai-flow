@@ -63,6 +63,10 @@ export interface Customer {
   /** A API guarda um único endereço por cliente. */
   address: Address | null;
   lastSaleAt: string | null;
+  /** Limite de fiado. 0 = sem fiado. */
+  creditLimit: number;
+  /** Categoria do cliente na revenda (ex.: "Vale Gás"). */
+  category: string | null;
 }
 
 export interface NewCustomer {

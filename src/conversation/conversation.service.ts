@@ -6,6 +6,8 @@ import { findCpf, isValidCpf, maskCpf } from '../common/cpf.js';
 import type { Conversation } from '../database/schema.js';
 import { EXPECTING, type MessageExtractor } from '../llm/message-extractor.js';
 import type { RevgasClient } from '../revgas/revgas-client.js';
+import type { Catalog } from './catalog.js';
+import type { Coverage } from './coverage.js';
 import {
   draftSchema,
   emptyDraft,
@@ -34,6 +36,11 @@ export interface IncomingMessage {
   text?: string;
   /** ID do botão tocado, quando a mensagem é um toque. */
   buttonId?: string;
+  /**
+   * Localização do WhatsApp. `address` vem quando o cliente compartilha um
+   * local com endereço escrito (issue #11).
+   */
+  location?: { latitude: number; longitude: number; address?: string };
 }
 
 export interface HandleResult {
@@ -51,6 +58,10 @@ export interface ConversationServiceOptions {
   ttlMs: number;
   /** A nota fiscal exige CPF de cliente novo. Padrão: não. */
   cpfRequired?: boolean;
+  /** Pix fictício depois da venda (só modo mock). */
+  pixDemo?: boolean;
+  /** Área de entrega da revenda. */
+  coverage?: Coverage;
 }
 
 /**
@@ -64,6 +75,7 @@ export class ConversationService {
     private readonly store: ConversationStore,
     private readonly extractor: MessageExtractor,
     private readonly revgas: RevgasClient,
+    private readonly catalog: Catalog,
     private readonly options: ConversationServiceOptions,
   ) {}
 
@@ -160,6 +172,8 @@ export class ConversationService {
     let signal: Signal;
     if (message.buttonId) {
       signal = signalFromButton(message.buttonId);
+    } else if (message.location) {
+      signal = await this.locationSignal(conversation.id, message.location);
     } else if (state.draft.expecting === 'cpf' && findCpf(text)) {
       // Resposta ao pedido de CPF: o código lê, o texto não vai ao LLM.
       signal = { ...signalFromButton(''), intent: 'order', button: null, text };
@@ -175,8 +189,13 @@ export class ConversationService {
 
     const result = await runTurn(state, signal, {
       revgas: this.revgas,
+      catalog: this.catalog,
       contact,
-      settings: { cpfRequired: this.options.cpfRequired ?? false },
+      settings: {
+        cpfRequired: this.options.cpfRequired ?? false,
+        pixDemo: this.options.pixDemo ?? false,
+        coverage: this.options.coverage,
+      },
     });
     await this.persist(conversation, result, at);
 
@@ -231,6 +250,30 @@ export class ConversationService {
     }
   }
 
+  /** Ponto no mapa: o endereço escrito (se houver) passa pelo extrator. */
+  private async locationSignal(
+    conversationId: string,
+    location: NonNullable<IncomingMessage['location']>,
+  ): Promise<Signal> {
+    const point = {
+      latitude: location.latitude,
+      longitude: location.longitude,
+    };
+    if (location.address) {
+      const extraction = await this.extractor.extract(location.address, {
+        expecting: 'address',
+      });
+      await this.store.addLlmTime(conversationId, extraction.durationMs);
+      return { ...signalFromExtraction(extraction, null), location: point };
+    }
+    return {
+      ...signalFromButton(''),
+      intent: 'change_address',
+      button: null,
+      location: point,
+    };
+  }
+
   private async withLock<T>(key: string, task: () => Promise<T>): Promise<T> {
     const previous = this.locks.get(key) ?? Promise.resolve();
     const run = previous.then(task, task);
@@ -254,6 +297,8 @@ export function loadState(conversation: Conversation): SessionState {
 
 /** Texto gravado no banco: CPF só com os dois últimos dígitos. */
 function bodyOf(message: IncomingMessage): string {
+  // Coordenadas ficam só no rascunho, não no texto da mensagem.
+  if (message.location) return '[localização]';
   if (message.text !== undefined) {
     return replaceCpfs(message.text, (cpf) => maskCpf(cpf));
   }

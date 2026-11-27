@@ -377,6 +377,8 @@ function toCustomer(dto: CustomerDto): Customer {
         }
       : null,
     lastSaleAt: dto.last_sale ?? null,
+    creditLimit: Number(dto.credit_limit ?? 0) || 0,
+    category: dto.tag_description ?? null,
   };
 }
 

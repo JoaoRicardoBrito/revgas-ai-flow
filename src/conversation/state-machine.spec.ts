@@ -20,8 +20,8 @@ const RECURRING = SEED.recurringCustomer.phone;
 const NEW_PHONE = '5586988880000';
 
 function setup(contact = NEW_PHONE) {
-  const { fake, revgas } = fakeRevgas();
-  const ctx = { revgas, contact };
+  const { fake, revgas, catalog } = fakeRevgas();
+  const ctx = { revgas, catalog, contact };
   const start: SessionState = { step: 'identifying', draft: emptyDraft() };
   return { fake, revgas, ctx, start };
 }
@@ -170,7 +170,7 @@ describe('confirmação', () => {
     expect(askAddress.replies[0]?.buttons?.[0]?.id).toBe('address:0');
   });
 
-  it('produto esgotado na criação volta a perguntar o produto', async () => {
+  it('produto esgotado antes de confirmar volta a perguntar o produto', async () => {
     const { fake, ctx, summary } = await atSummary();
     fake.setStock(SEED.products.p13, 0);
 
@@ -178,7 +178,7 @@ describe('confirmação', () => {
 
     expect(result.step).toBe('collecting');
     expect(result.draft.item).toBeNull();
-    expect(result.replies[0]?.text).toMatch(/esgotar/);
+    expect(result.replies[0]?.text).toMatch(/acabou agora/);
     expect(result.events).toEqual([]);
   });
 

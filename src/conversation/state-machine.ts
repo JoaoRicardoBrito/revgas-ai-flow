@@ -1,6 +1,7 @@
 import type { ExtractionResult } from '../llm/message-extractor.js';
 import { RevgasError } from '../revgas/revgas.errors.js';
 import type {
+  Reply,
   SessionState,
   Signal,
   Step,
@@ -57,7 +58,16 @@ export async function runTurn(
   }
 
   assertTransition(state.step, result.step);
-  return result;
+  return { ...result, replies: result.replies.map(present) };
+}
+
+/** WhatsApp aceita até 3 botões; mais que isso vira lista (issue #10). */
+export const MAX_BUTTONS = 3;
+
+export function present(reply: Reply): Reply {
+  const count = reply.buttons?.length ?? 0;
+  if (count === 0) return reply;
+  return { ...reply, presentation: count > MAX_BUTTONS ? 'list' : 'buttons' };
 }
 
 export const SYSTEM_UNAVAILABLE = {
@@ -85,6 +95,8 @@ const BUTTON_INTENTS: Readonly<Record<string, Signal['intent']>> = {
   address: 'change_address',
   'save_address:yes': 'confirm',
   'save_address:no': 'deny',
+  'sale_change:confirm': 'confirm',
+  'sale_change:keep': 'deny',
 };
 
 /** Toque em botão: vira intenção direto, sem passar pelo LLM. */
@@ -100,6 +112,7 @@ export function signalFromButton(buttonId: string): Signal {
     button: buttonId,
     llmUnavailable: false,
     text: null,
+    location: null,
   };
 }
 
@@ -114,6 +127,7 @@ export function signalFromExtraction(
       button: null,
       llmUnavailable: false,
       text,
+      location: null,
     };
   }
   return {
@@ -122,5 +136,6 @@ export function signalFromExtraction(
     button: null,
     llmUnavailable: result.reason !== 'empty_message',
     text,
+    location: null,
   };
 }

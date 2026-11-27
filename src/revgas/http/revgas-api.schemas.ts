@@ -40,6 +40,10 @@ export const customerDto = z.object({
   latitude: text,
   longitude: z.union([z.string(), z.number()]).nullish(),
   last_sale: text,
+  /** Limite de fiado (contas a receber), em reais. */
+  credit_limit: z.union([z.string(), z.number()]).nullish(),
+  /** Categoria do cliente na revenda. */
+  tag_description: text,
 });
 export type CustomerDto = z.infer<typeof customerDto>;
 

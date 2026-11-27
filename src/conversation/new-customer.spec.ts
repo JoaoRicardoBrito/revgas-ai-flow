@@ -10,8 +10,11 @@ const VALID_CPF = '529.982.247-25'; // fictício
 const start: SessionState = { step: 'identifying', draft: emptyDraft() };
 
 function setup(contact: string = NEW_PHONE, cpfRequired = false) {
-  const { fake, revgas } = fakeRevgas();
-  return { fake, ctx: { revgas, contact, settings: { cpfRequired } } };
+  const { fake, revgas, catalog } = fakeRevgas();
+  return {
+    fake,
+    ctx: { revgas, catalog, contact, settings: { cpfRequired } },
+  };
 }
 
 describe('pergunta só o que falta, numa mensagem com vários dados', () => {
