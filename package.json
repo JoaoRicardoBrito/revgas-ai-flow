@@ -22,8 +22,11 @@
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run test:e2e",
-    "test:contract:real": "REVGAS_CONTRACT_REAL=true vitest run src/revgas/http/http-revgas-client.real.spec.ts --testTimeout=30000"
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run db:check && npm run test && npm run test:e2e",
+    "test:contract:real": "REVGAS_CONTRACT_REAL=true vitest run src/revgas/http/http-revgas-client.real.spec.ts --testTimeout=30000",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:check": "drizzle-kit generate && git diff --exit-code -- drizzle && test -z \"$(git ls-files --others --exclude-standard -- drizzle)\""
   },
   "repository": {
     "type": "git",
@@ -34,10 +37,13 @@
   },
   "homepage": "https://github.com/JoaoRicardoBrito/revgas-ai-flow#readme",
   "dependencies": {
+    "@electric-sql/pglite": "^0.6.1",
     "@nestjs/common": "^12.6.3",
     "@nestjs/config": "^12.1.1",
     "@nestjs/core": "^12.6.3",
     "@nestjs/platform-express": "^12.6.3",
+    "drizzle-orm": "^0.45.4",
+    "pg": "^8.23.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "zod": "^4.6.7"
@@ -48,8 +54,10 @@
     "@nestjs/testing": "^12.6.3",
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.11",
+    "@types/pg": "^8.23.1",
     "@types/supertest": "^7.2.1",
     "@vitest/coverage-v8": "^5.1.2",
+    "drizzle-kit": "^0.31.11",
     "oxlint": "^1.95.0",
     "oxlint-tsgolint": "^7.0.2009",
     "prettier": "^3.10.1",

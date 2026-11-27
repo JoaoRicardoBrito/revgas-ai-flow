@@ -29,6 +29,8 @@ jobs:
       - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck
+      - name: Migrations em dia com o schema
+        run: npm run db:check
       - run: npm test
       - run: npm run test:e2e
       - run: npm run build
