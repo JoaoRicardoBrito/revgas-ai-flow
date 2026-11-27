@@ -50,6 +50,15 @@ A tabela fica em [`transitions.ts`](../src/conversation/transitions.ts). Qualque
 - **Estoque:** a quantidade é conferida contra o estoque ao escolher. No Confirmar, o código consulta o estoque na API, sem cache, antes do cadastro e da venda.
 - **Sem estoque:** oferece os outros produtos à venda e o atendente; nunca cria a venda. Se a RevGás recusar a venda por estoque, o cache é descartado e as opções são reabertas. Com mais de 3 opções, o canal mostra lista (WhatsApp, #18).
 
+## Pagamento (issue #10)
+
+- **Formas:** só as cadastradas e ativas na revenda, lidas da API. Ordem: a do último pedido, depois dinheiro, Pix, débito e crédito. Boleto, transferência e cheque não aparecem (cobrança antecipada, fora do protótipo).
+- **Botões ou lista:** toda resposta com até 3 opções vai em botões; com mais, em lista (`presentation`), limite do WhatsApp.
+- **Fiado e vale gás:** só para cliente autorizado. Hoje: fiado com `credit_limit` no cadastro; vale gás com categoria do cliente contendo "vale gás". Cliente novo não tem nenhum. Botão forjado de forma não liberada é ignorado.
+- **Troco:** "troco para 100" vale só para dinheiro; aparece no resumo e vai na observação da venda.
+- **Pix fictício:** só no modo mock, depois da venda com Pix, um "copia e cola" marcado como demonstração. Duas travas: a chave é de um domínio `.invalid`, que não existe, e o CRC é invertido de propósito, para o banco recusar o código ([`pix-demo.ts`](../src/payments/pix-demo.ts)). No modo real, Pix é na entrega.
+- **Recusa:** simulada no mock. A venda não é criada (nada é despachado); o bot oferece outra forma, sem a recusada; na segunda recusa, atendente.
+
 ## Regras de qualquer etapa
 
 - **Atendente:** pedir atendente encerra com passagem (handoff). Depois disso o bot só registra as mensagens, sem responder, até a sessão expirar.
@@ -69,7 +78,7 @@ A tabela fica em [`transitions.ts`](../src/conversation/transitions.ts). Qualque
 | Ponto | Hoje | Issue |
 |-------|------|-------|
 | Preço | `PRODUCT_PRICES` configurado pela revenda (a API não tem preço); recorrente paga o do último pedido. Sem tabela: demonstração no mock, nada à venda no modo real | pergunta 2 da #1 |
-| Pagamento | Botões com todas as formas aceitas, menos fiado e vale gás | #10 |
+| Fiado e vale gás | Fiado com limite de crédito no cadastro; vale gás com categoria "vale gás" (suposição) | pergunta 13 da #1 |
 | Endereço | Até 3 conhecidos (últimas vendas + cadastro) em botões, ou digitado; sem cobertura nem localização | #11 |
 | Cancelamento | Usa o primeiro motivo cadastrado | #12 |
 | Atendente | Sem resumo, sem horário de funcionamento, sem painel | #13 |

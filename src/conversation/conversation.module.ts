@@ -97,6 +97,8 @@ class SessionExpirer implements OnModuleInit, OnModuleDestroy {
           ttlMs:
             config.get('CONVERSATION_TTL_MINUTES', { infer: true }) * 60_000,
           cpfRequired: config.get('CPF_REQUIRED', { infer: true }),
+          // Pix fictício só com a RevGás simulada.
+          pixDemo: config.get('REVGAS_USE_MOCK', { infer: true }),
         }),
     },
     SessionExpirer,

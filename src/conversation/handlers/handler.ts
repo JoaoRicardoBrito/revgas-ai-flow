@@ -33,6 +33,11 @@ export interface ConversationSettings {
    * opcional, então o padrão é não pedir (CPF_REQUIRED).
    */
   cpfRequired: boolean;
+  /**
+   * Manda o Pix copia e cola fictício depois da venda. Só no modo mock:
+   * cliente real nunca recebe código de demonstração.
+   */
+  pixDemo?: boolean;
 }
 
 export type StepHandler = (

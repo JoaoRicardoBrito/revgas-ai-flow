@@ -103,8 +103,9 @@ export function applySignal(
       : next.customer?.savedAddresses[Number(savedIndex)];
   if (saved) next.address = saved;
 
-  // Pagamento: botão `payment:<código>` ou forma citada no texto.
-  const accepted = offeredPayments(offer.paymentTypes);
+  // Pagamento: botão `payment:<código>` ou forma citada no texto. Só as
+  // que este cliente pode usar (fiado e vale gás com autorização).
+  const accepted = paymentOptions(next, offer);
   const buttonPayment = valueOf(signal.button, 'payment');
   const payment = buttonPayment
     ? accepted.find((t) => t.code === buttonPayment)?.code
@@ -112,9 +113,14 @@ export function applySignal(
       ? matchPayment(x.paymentMethod, accepted)
       : undefined;
   if (x?.paymentMethod && !payment) {
-    notices.push('Essa forma de pagamento não é aceita aqui.');
+    notices.push(
+      'Essa forma de pagamento não está disponível para este pedido.',
+    );
   }
   if (payment) next.payment = payment;
+  // Troco só existe para dinheiro; pode vir junto ou numa mensagem depois.
+  next.changeFor =
+    next.payment === 'MONEY' ? (x?.changeFor ?? next.changeFor) : null;
 
   // Nome: só para cliente novo.
   if (x?.customerName && next.customer && next.customer.id === null) {
@@ -217,7 +223,7 @@ export function askFor(field: Field, draft: Draft, offer: Offer): Reply {
     case 'payment':
       return {
         text: 'Como você vai pagar? O pagamento é na entrega.',
-        buttons: offeredPayments(offer.paymentTypes).map((t) => ({
+        buttons: paymentOptions(draft, offer).map((t) => ({
           id: `payment:${t.code}`,
           label: t.description,
         })),
@@ -256,6 +262,9 @@ export function summary(
       : '',
     draft.address ? `Entrega: ${formatAddress(draft.address)}` : '',
     `Pagamento na entrega: ${payment ?? ''}`,
+    draft.payment === 'MONEY' && draft.changeFor
+      ? `Troco para ${money(draft.changeFor)}`
+      : '',
     `Total: ${money(total(draft))}`,
     isNew
       ? 'Ao confirmar, seu cadastro e este endereço ficam salvos para os próximos pedidos.'
@@ -352,3 +361,12 @@ function valueOf(button: string | null, prefix: string): string | null {
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Formas que este cliente pode escolher agora, na ordem de exibição. */
+export function paymentOptions(draft: Draft, offer: Offer): PaymentType[] {
+  return offeredPayments(offer.paymentTypes, {
+    authorized: draft.customer?.authorizedPayments ?? [],
+    exclude: draft.declinedPayments,
+    preferred: draft.customer?.lastPayment ?? null,
+  });
+}

@@ -1,6 +1,7 @@
 import type { ExtractionResult } from '../llm/message-extractor.js';
 import { RevgasError } from '../revgas/revgas.errors.js';
 import type {
+  Reply,
   SessionState,
   Signal,
   Step,
@@ -57,7 +58,16 @@ export async function runTurn(
   }
 
   assertTransition(state.step, result.step);
-  return result;
+  return { ...result, replies: result.replies.map(present) };
+}
+
+/** WhatsApp aceita até 3 botões; mais que isso vira lista (issue #10). */
+export const MAX_BUTTONS = 3;
+
+export function present(reply: Reply): Reply {
+  const count = reply.buttons?.length ?? 0;
+  if (count === 0) return reply;
+  return { ...reply, presentation: count > MAX_BUTTONS ? 'list' : 'buttons' };
 }
 
 export const SYSTEM_UNAVAILABLE = {

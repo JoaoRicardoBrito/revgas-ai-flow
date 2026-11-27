@@ -52,6 +52,8 @@ export interface ConversationServiceOptions {
   ttlMs: number;
   /** A nota fiscal exige CPF de cliente novo. Padrão: não. */
   cpfRequired?: boolean;
+  /** Pix fictício depois da venda (só modo mock). */
+  pixDemo?: boolean;
 }
 
 /**
@@ -179,7 +181,10 @@ export class ConversationService {
       revgas: this.revgas,
       catalog: this.catalog,
       contact,
-      settings: { cpfRequired: this.options.cpfRequired ?? false },
+      settings: {
+        cpfRequired: this.options.cpfRequired ?? false,
+        pixDemo: this.options.pixDemo ?? false,
+      },
     });
     await this.persist(conversation, result, at);
 

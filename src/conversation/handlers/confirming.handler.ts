@@ -1,4 +1,7 @@
 import { RevgasError } from '../../revgas/revgas.errors.js';
+import type { PaymentTypeCode } from '../../revgas/revgas.types.js';
+import { demoPixMessage } from '../../payments/pix-demo.js';
+import type { Offer } from '../catalog.js';
 import type { Draft, Reply } from '../conversation.types.js';
 import {
   applySignal,
@@ -6,6 +9,7 @@ import {
   CHANGE_MENU,
   clearField,
   formatAddress,
+  money,
   sameAddress,
   summary,
   total,
@@ -13,6 +17,7 @@ import {
 import {
   advance,
   canceledBeforeSale,
+  handoff,
   loadOffer,
   misunderstood,
   outcome,
@@ -131,6 +136,9 @@ async function createSale(
       address,
       items: [item],
       payments: [{ code: payment, value: total(draft) }],
+      ...(payment === 'MONEY' && draft.changeFor
+        ? { observation: `Troco para ${money(draft.changeFor)}` }
+        : {}),
     });
 
     // Cliente antigo com endereço que ainda não conhecíamos: oferece salvar.
@@ -140,6 +148,12 @@ async function createSale(
     const replies: Reply[] = [
       { text: `Pedido nº ${sale.id} registrado! Logo sai para entrega.` },
     ];
+    // Pix copia e cola fictício, só no modo mock (issue #10).
+    if (payment === 'PIX' && ctx.settings?.pixDemo) {
+      replies.push({
+        text: demoPixMessage({ amount: total(draft), saleId: sale.id }),
+      });
+    }
     if (newAddress) {
       replies.push({
         text: `Quer salvar ${formatAddress(address)} no seu cadastro para os próximos pedidos?`,
@@ -173,11 +187,7 @@ async function createSale(
       );
     }
     if (error.code === 'payment_declined') {
-      const cleared = { ...draft, payment: null };
-      const ask = askFor('payment', cleared, offer);
-      return outcome('collecting', { ...cleared, expecting: 'payment' }, [
-        { ...ask, text: `O pagamento não foi aceito. ${ask.text}` },
-      ]);
+      return paymentDeclined(draft, payment, offer);
     }
     // Falha temporária: mantém o resumo para tentar de novo (issue #14).
     return outcome('confirming', draft, [
@@ -187,4 +197,34 @@ async function createSale(
       },
     ]);
   }
+}
+
+/**
+ * Pagamento recusado (issue #10): a venda não foi criada, então nada é
+ * despachado. Oferece outra forma, sem a recusada; na segunda recusa,
+ * passa para o atendente.
+ */
+function paymentDeclined(
+  draft: Draft,
+  declined: PaymentTypeCode,
+  offer: Offer,
+) {
+  const failures = draft.paymentFailures + 1;
+  const next: Draft = {
+    ...draft,
+    payment: null,
+    changeFor: null,
+    paymentFailures: failures,
+    declinedPayments: [...new Set([...draft.declinedPayments, declined])],
+  };
+  if (failures >= 2) return handoff(next, 'problema de pagamento');
+  const ask = askFor('payment', next, offer);
+  const options = ask.buttons ?? [];
+  if (options.length === 0) return handoff(next, 'problema de pagamento');
+  return outcome('collecting', { ...next, expecting: 'payment' }, [
+    {
+      ...ask,
+      text: `O pagamento não foi aceito. Pode escolher outra forma? ${ask.text}`,
+    },
+  ]);
 }

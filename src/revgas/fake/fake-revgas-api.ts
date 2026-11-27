@@ -33,6 +33,9 @@ export interface FakeCustomer {
   latitude: string | null;
   longitude: string | null;
   last_sale: string | null;
+  credit_limit: string | null;
+  /** Derivada da categoria (tag_id); só leitura. */
+  tag_description: string | null;
 }
 
 export interface FakeProduct {
@@ -353,6 +356,7 @@ export class FakeRevgasApi {
       created_at: now,
       updated_at: now,
       last_sale: null,
+      tag_description: null,
       ...customerFields(body),
     };
     this.customers.push(customer);
@@ -773,6 +777,7 @@ function customerFields(body: Record<string, unknown>) {
   return {
     name: str(body.name) ?? '',
     cpf: str(body.cpf),
+    credit_limit: str(body.credit_limit),
     type:
       body.type === 'JURIDICAL'
         ? ('JURIDICAL' as const)

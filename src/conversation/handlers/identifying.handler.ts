@@ -1,6 +1,6 @@
-import { offeredPayments, sellable } from '../catalog.js';
+import { authorizedPaymentsFor, sellable } from '../catalog.js';
 import type { Draft } from '../conversation.types.js';
-import { applySignal, distinctAddresses } from '../draft.js';
+import { applySignal, distinctAddresses, paymentOptions } from '../draft.js';
 import { advance, loadOffer, type StepHandler } from './handler.js';
 
 /** Vendas olhadas para montar os endereços conhecidos. */
@@ -37,6 +37,8 @@ export const identifyingHandler: StepHandler = async (state, signal, ctx) => {
           savedAddresses,
           cpf: null,
           needsCpf: false,
+          authorizedPayments: authorizedPaymentsFor(customer),
+          lastPayment: recent[0]?.payments[0]?.code ?? null,
         }
       : {
           id: null,
@@ -45,6 +47,8 @@ export const identifyingHandler: StepHandler = async (state, signal, ctx) => {
           cpf: null,
           // CPF só se a nota exigir; cliente antigo já tem cadastro.
           needsCpf: ctx.settings?.cpfRequired ?? false,
+          authorizedPayments: [],
+          lastPayment: null,
         },
   };
 
@@ -56,7 +60,7 @@ export const identifyingHandler: StepHandler = async (state, signal, ctx) => {
       (p) => p.id === lastItem.productId,
     );
     const lastPayment = last.payments[0]?.code;
-    const paymentStillAccepted = offeredPayments(offer.paymentTypes).some(
+    const paymentStillAccepted = paymentOptions(draft, offer).some(
       (t) => t.code === lastPayment,
     );
     if (!product) {

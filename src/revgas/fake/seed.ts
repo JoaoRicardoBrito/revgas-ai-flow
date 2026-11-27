@@ -94,6 +94,8 @@ export function createSeed(now: Date): FakeSeed {
       latitude: null,
       longitude: null,
       last_sale: lastSaleAt,
+      credit_limit: '200.00',
+      tag_description: 'Vale Gás',
     },
     {
       id: SEED.customerWithoutSales.id,
@@ -114,6 +116,8 @@ export function createSeed(now: Date): FakeSeed {
       latitude: null,
       longitude: null,
       last_sale: null,
+      credit_limit: null,
+      tag_description: null,
     },
   ];
 
@@ -153,6 +157,8 @@ export function createSeed(now: Date): FakeSeed {
     paymentType(3, 'CARTAO_DE_DEBITO', 'Cartão de Débito'),
     paymentType(4, 'CARTAO_DE_CREDITO', 'Cartão de Crédito'),
     paymentType(5, 'VALEGAS', 'Vale Gás'),
+    paymentType(7, 'CREDITO_CLIENTE', 'Fiado'),
+    paymentType(8, 'FETLOCK', 'Boleto Bancário'),
     paymentType(6, 'BANKDRAFT', 'Cheque', 'INACTIVE'),
   ];
 
