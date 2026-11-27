@@ -23,7 +23,23 @@ TypeScript, NestJS, Postgres (Supabase gratuito), Groq (modelo aberto), simulado
 
 ## Como rodar
 
-Em construção. Copie `.env.example` para `.env` e preencha os valores. Com `REVGAS_USE_MOCK=true` nada é enviado à API real da RevGás.
+Requer Node 22.12 ou superior (o CI usa a versão do `.nvmrc`).
+
+```bash
+npm install
+cp .env.example .env   # opcional: sem .env, sobe em modo mock com valores padrão
+npm run start:dev      # http://localhost:3000/health
+```
+
+Com `REVGAS_USE_MOCK=true` (padrão) nada é enviado à API real da RevGás. A configuração é validada na subida; se faltar ou sobrar algo, a aplicação não sobe e lista as variáveis com problema, sem mostrar os valores.
+
+| Comando | O que faz |
+|---------|-----------|
+| `npm run check` | Formatação, lint, tipos, testes e e2e, na mesma ordem do CI |
+| `npm test` / `npm run test:e2e` | Testes de unidade (`src/**/*.spec.ts`) e e2e (`test/**/*.e2e-spec.ts`) |
+| `npm run lint` | oxlint com regras que usam tipos |
+| `npm run format` | Prettier |
+| `npm run build` | Compila para `dist/` |
 
 ## Segurança
 
