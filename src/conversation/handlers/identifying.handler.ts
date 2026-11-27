@@ -1,45 +1,77 @@
+import { offeredPayments, sellable } from '../catalog.js';
 import type { Draft } from '../conversation.types.js';
-import { applySignal } from '../draft.js';
+import { applySignal, distinctAddresses } from '../draft.js';
 import { advance, loadOffer, type StepHandler } from './handler.js';
 
+/** Vendas olhadas para montar os endereços conhecidos. */
+const RECENT_SALES = 5;
+
 /**
- * Primeira mensagem. Busca o cliente pelo telefone; se ele já comprou,
- * pré-preenche o último pedido ("o mesmo de sempre", issue #7). Em seguida
- * aplica o que a própria mensagem já trouxe e segue para o que falta.
+ * Primeira mensagem. Busca o cliente pelo telefone (issue #7):
+ *
+ * - Recorrente: pré-preenche o último pedido e mostra o resumo numa
+ *   mensagem só, para confirmar com um toque. Produto esgotado ou forma de
+ *   pagamento desativada não são reaproveitados: viram pergunta.
+ * - Telefone que não está no cadastro: cliente novo, mesmo que a pessoa já
+ *   tenha comprado com outro número.
+ *
+ * Depois aplica o que a própria mensagem trouxe e segue para o que falta.
  */
 export const identifyingHandler: StepHandler = async (state, signal, ctx) => {
   const [customer] = await ctx.revgas.findCustomersByPhone(ctx.contact);
+  const recent = customer
+    ? await ctx.revgas.listRecentSales(customer.id, RECENT_SALES)
+    : [];
+  const offer = await loadOffer(ctx.revgas);
+
+  const savedAddresses = distinctAddresses([
+    ...recent.map((s) => s.address),
+    customer?.address,
+  ]);
   let draft: Draft = {
     ...state.draft,
     customer: customer
-      ? { id: customer.id, name: customer.name, savedAddress: customer.address }
-      : { id: null, name: null, savedAddress: null },
+      ? { id: customer.id, name: customer.name, savedAddresses }
+      : { id: null, name: null, savedAddresses: [] },
   };
 
-  const last = customer ? await ctx.revgas.findLastSale(customer.id) : null;
+  const notices: string[] = customer ? [] : ['Oi! Vou anotar seu pedido.'];
+  const [last] = recent;
   const [lastItem] = last?.items ?? [];
   if (last && lastItem) {
+    const product = sellable(offer.catalog).find(
+      (p) => p.id === lastItem.productId,
+    );
+    const lastPayment = last.payments[0]?.code;
+    const paymentStillAccepted = offeredPayments(offer.paymentTypes).some(
+      (t) => t.code === lastPayment,
+    );
+    if (!product) {
+      notices.push(
+        `O ${lastItem.description} do seu último pedido está em falta agora.`,
+      );
+    }
     draft = {
       ...draft,
-      item: { ...lastItem },
-      address: last.address ?? customer?.address ?? null,
-      payment: last.payments[0]?.code ?? null,
-      fromLastOrder: true,
+      item: product ? { ...lastItem, description: product.description } : null,
+      address: last.address ?? savedAddresses[0] ?? null,
+      payment: paymentStillAccepted && lastPayment ? lastPayment : null,
+      fromLastOrder: Boolean(product),
     };
+  } else if (customer) {
+    draft = { ...draft, address: savedAddresses[0] ?? null };
   }
 
-  const offer = await loadOffer(ctx.revgas);
   const applied = applySignal(draft, signal, offer);
   const firstName = customer?.name.split(' ')[0];
-  const header = draft.fromLastOrder
+  const header = applied.draft.fromLastOrder
     ? `Oi${firstName ? `, ${firstName}` : ''}! Mesmo pedido de sempre?`
     : undefined;
-  const greeting = customer ? [] : ['Oi! Vou anotar seu pedido.'];
 
   return advance(
     applied.draft,
     offer,
-    [...greeting, ...applied.notices],
+    [...notices, ...applied.notices],
     [{ type: 'customer_identified', customerId: customer?.id ?? null }],
     header,
   );

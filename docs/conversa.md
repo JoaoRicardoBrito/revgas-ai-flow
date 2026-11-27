@@ -28,7 +28,7 @@ A tabela fica em [`transitions.ts`](../src/conversation/transitions.ts). Qualque
 
 | Etapa | Handler | O que faz |
 |-------|---------|-----------|
-| `identifying` | [`identifying.handler.ts`](../src/conversation/handlers/identifying.handler.ts) | Busca o cliente pelo telefone; se já comprou, pré-preenche o último pedido |
+| `identifying` | [`identifying.handler.ts`](../src/conversation/handlers/identifying.handler.ts) | Busca o cliente pelo telefone. Recorrente: último pedido num resumo só (confirma com um toque), sem reaproveitar produto esgotado nem pagamento desativado. Telefone fora do cadastro: cliente novo |
 | `collecting` | [`collecting.handler.ts`](../src/conversation/handlers/collecting.handler.ts) | Aplica o que veio e pergunta o próximo campo: produto, endereço, pagamento, nome (só cliente novo) |
 | `confirming` | [`confirming.handler.ts`](../src/conversation/handlers/confirming.handler.ts) | Resumo com Confirmar, Alterar e Cancelar; cria cliente (se novo) e venda |
 | `sale_created` | [`after-sale.handlers.ts`](../src/conversation/handlers/after-sale.handlers.ts) | Cancelar pelo bot; o resto informa o status |
@@ -57,7 +57,7 @@ A tabela fica em [`transitions.ts`](../src/conversation/transitions.ts). Qualque
 | Catálogo | Consultado a cada turno, sem cache | #9 |
 | "Um maior" / "um menor" | Mostra os produtos em botões | #9 |
 | Pagamento | Botões com todas as formas aceitas, menos fiado e vale gás | #10 |
-| Endereço | Um salvo + digitado; sem cobertura nem localização | #7, #11 |
+| Endereço | Até 3 conhecidos (últimas vendas + cadastro) em botões, ou digitado; sem cobertura nem localização | #11 |
 | Cancelamento | Usa o primeiro motivo cadastrado | #12 |
 | Atendente | Sem resumo, sem horário de funcionamento, sem painel | #13 |
 | Despacho | `ConversationService.notifyDispatched`, ainda sem quem chame | #13, #16 |

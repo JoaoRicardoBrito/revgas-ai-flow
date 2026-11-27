@@ -36,6 +36,8 @@ export interface RevgasClient {
 
   /** Venda mais recente do cliente nos últimos 12 meses, ou `null`. */
   findLastSale(customerId: number): Promise<Sale | null>;
+  /** Até `limit` vendas do cliente nos últimos 12 meses, mais nova primeiro. */
+  listRecentSales(customerId: number, limit: number): Promise<Sale[]>;
   getSale(id: number): Promise<Sale>;
   /** Cria a venda com canal WhatsApp e origem integração. */
   createSale(input: NewSale): Promise<Sale>;

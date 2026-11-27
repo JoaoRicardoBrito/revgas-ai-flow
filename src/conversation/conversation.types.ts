@@ -42,7 +42,11 @@ export const draftSchema = z.object({
     .object({
       id: z.number().nullable(),
       name: z.string().nullable(),
-      savedAddress: addressSchema.nullable(),
+      /**
+       * Até 3 endereços conhecidos, mais recente primeiro: o das últimas
+       * vendas e o do cadastro (a API guarda um só no cliente).
+       */
+      savedAddresses: z.array(addressSchema).max(3).default([]),
     })
     .nullable()
     .default(null),
