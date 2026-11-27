@@ -138,7 +138,10 @@ export class FakeRevgasApi {
   private readonly options: Required<Omit<FakeRevgasApiOptions, 'seed'>>;
   private readonly routes: Route[];
   private nextId = 1000;
-  private pendingFailures: number[] = [];
+  private pendingFailures: {
+    status: number;
+    only: { method?: string; path?: string } | undefined;
+  }[] = [];
   private declineNextPayments = 0;
   private lastRequestAt = Number.NEGATIVE_INFINITY;
 
@@ -165,9 +168,16 @@ export class FakeRevgasApi {
     this.options.latencyMs = ms;
   }
 
-  /** As próximas `count` requisições falham com `status` (padrão 500). */
-  failNext(count = 1, status = 500): void {
-    for (let i = 0; i < count; i++) this.pendingFailures.push(status);
+  /**
+   * As próximas `count` requisições falham com `status` (padrão 500). Com
+   * `only`, só as que batem com o método e o caminho (ex.: POST /sales).
+   */
+  failNext(
+    count = 1,
+    status = 500,
+    only?: { method?: string; path?: string },
+  ): void {
+    for (let i = 0; i < count; i++) this.pendingFailures.push({ status, only });
   }
 
   /** As próximas `count` vendas criadas têm o pagamento recusado. */
@@ -204,8 +214,15 @@ export class FakeRevgasApi {
 
     await abortableDelay(this.options.latencyMs, request.signal);
 
-    const failure = this.pendingFailures.shift();
-    if (failure !== undefined) return standardError(failure);
+    const failureIndex = this.pendingFailures.findIndex(
+      ({ only }) =>
+        (!only?.method || only.method === request.method) &&
+        (!only?.path || only.path === path),
+    );
+    if (failureIndex >= 0) {
+      const [failure] = this.pendingFailures.splice(failureIndex, 1);
+      if (failure) return standardError(failure.status);
+    }
 
     if (this.options.enforceRateLimit) {
       const now = Date.now();

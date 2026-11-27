@@ -12,6 +12,13 @@ export const envSchema = z
       .enum(['development', 'test', 'production'])
       .default('development'),
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+    /** Minutos sem mensagem até a sessão expirar (abandono). */
+    CONVERSATION_TTL_MINUTES: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(1440)
+      .default(30),
 
     REVGAS_API_BASE_URL: z.url().default('https://api.revgas.com/v1'),
     REVGAS_API_KEY: z.string().optional(),
