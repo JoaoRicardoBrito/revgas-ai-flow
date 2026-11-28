@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { Database } from './database.js';
 import {
   conversations,
@@ -10,6 +10,11 @@ import {
 } from './schema.js';
 
 export type Channel = Conversation['channel'];
+
+export interface OrderRow {
+  channel: Channel;
+  metrics: OrderMetrics;
+}
 
 export interface Handoff {
   conversation: Conversation;
@@ -96,7 +101,7 @@ export class ConversationStore {
     return row;
   }
 
-  /** Grava a mensagem do cliente e conta o turno; ignora reenvios. */
+  /** Grava a mensagem e conta o turno (só até a venda); ignora reenvios. */
   async recordInbound(input: InboundMessage): Promise<InboundResult> {
     return this.db.transaction(async (tx) => {
       const [inserted] = await tx
@@ -115,7 +120,7 @@ export class ConversationStore {
       await tx
         .update(orderMetrics)
         .set({ turns: sql`${orderMetrics.turns} + 1` })
-        .where(eq(orderMetrics.conversationId, input.conversationId));
+        .where(beforeSale(input.conversationId));
       await tx
         .update(conversations)
         .set({ lastMessageAt: input.at, updatedAt: input.at })
@@ -311,13 +316,35 @@ export class ConversationStore {
       .where(eq(orderMetrics.conversationId, conversationId));
   }
 
+  /** Tempo por etapa: como o total, só conta até a venda. */
   async addLlmTime(conversationId: string, ms: number): Promise<void> {
     await this.db
       .update(orderMetrics)
       .set({
         llmMs: sql`${orderMetrics.llmMs} + ${Math.max(0, Math.round(ms))}`,
       })
-      .where(eq(orderMetrics.conversationId, conversationId));
+      .where(beforeSale(conversationId));
+  }
+
+  async addRevgasTime(conversationId: string, ms: number): Promise<void> {
+    await this.db
+      .update(orderMetrics)
+      .set({
+        revgasMs: sql`${orderMetrics.revgasMs} + ${Math.max(0, Math.round(ms))}`,
+      })
+      .where(beforeSale(conversationId));
+  }
+
+  /** Métricas de todos os pedidos, o mais recente primeiro. */
+  listOrderMetrics(): Promise<OrderRow[]> {
+    return this.db
+      .select({ channel: conversations.channel, metrics: orderMetrics })
+      .from(orderMetrics)
+      .innerJoin(
+        conversations,
+        eq(conversations.id, orderMetrics.conversationId),
+      )
+      .orderBy(sql`${orderMetrics.firstMessageAt} DESC`);
   }
 
   /**
@@ -347,4 +374,12 @@ export class ConversationStore {
     }
     return idle.length;
   }
+}
+
+/** Linha de métricas da conversa, enquanto ainda não há venda. */
+function beforeSale(conversationId: string) {
+  return and(
+    eq(orderMetrics.conversationId, conversationId),
+    isNull(orderMetrics.saleCreatedAt),
+  );
 }
