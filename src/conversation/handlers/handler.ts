@@ -1,3 +1,4 @@
+import type { BusinessHours } from '../../attendant/business-hours.js';
 import type { RevgasClient } from '../../revgas/revgas-client.js';
 import type { Catalog } from '../catalog.js';
 import type { Coverage } from '../coverage.js';
@@ -25,6 +26,8 @@ export interface TurnContext {
   catalog: Catalog;
   /** Telefone (ou ID do simulador) de quem escreve. */
   contact: string;
+  /** Hora do turno. Padrão: agora. */
+  now?: Date;
   settings?: ConversationSettings;
 }
 
@@ -41,6 +44,8 @@ export interface ConversationSettings {
   pixDemo?: boolean;
   /** Área de entrega (COVERAGE_*). */
   coverage?: Coverage;
+  /** Horário do atendimento humano. Sem ele, sempre aberto. */
+  businessHours?: BusinessHours;
 }
 
 export type StepHandler = (
