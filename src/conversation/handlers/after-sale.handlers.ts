@@ -1,5 +1,11 @@
+import type { Signal } from '../conversation.types.js';
 import { RevgasError } from '../../revgas/revgas.errors.js';
-import { handoff, outcome, type StepHandler } from './handler.js';
+import {
+  handoff,
+  misunderstood,
+  outcome,
+  type StepHandler,
+} from './handler.js';
 import { applyChange, proposeChange, wantsChange } from './sale-change.js';
 
 /**
@@ -90,22 +96,25 @@ export const saleCreatedHandler: StepHandler = async (state, signal, ctx) => {
       return handoff(state.draft, 'falha ao cancelar a venda');
     }
   }
-  return outcome('sale_created', state.draft, [
-    {
-      text: `Seu pedido nº ${saleId ?? ''} já está registrado e logo sai para entrega.`,
-    },
-  ]);
+  const status = `Seu pedido nº ${saleId ?? ''} já está registrado e logo sai para entrega.`;
+  if (notUnderstood(signal)) {
+    return misunderstood(state, { text: status, buttons: [HUMAN_BUTTON] });
+  }
+  return outcome('sale_created', state.draft, [{ text: status }]);
 };
+
+const HUMAN_BUTTON = { id: 'human', label: 'Falar com atendente' };
+
+const notUnderstood = (signal: Signal) =>
+  signal.intent === 'unknown' || signal.intent === 'other';
 
 /**
  * Entregador a caminho (PRD 6.1): produto não muda; endereço e
  * cancelamento só com atendente, que combina com o entregador.
  */
 export const dispatchedHandler: StepHandler = (state, signal) => {
-  if (signal.intent === 'cancel' || signal.intent === 'complaint') {
-    return Promise.resolve(
-      handoff(state.draft, 'cancelamento ou reclamação após despacho'),
-    );
+  if (signal.intent === 'cancel') {
+    return Promise.resolve(handoff(state.draft, 'cancelamento após despacho'));
   }
   const x = signal.extraction;
   if (
@@ -129,6 +138,14 @@ export const dispatchedHandler: StepHandler = (state, signal) => {
           buttons: [{ id: 'human', label: 'Falar com atendente' }],
         },
       ]),
+    );
+  }
+  if (notUnderstood(signal)) {
+    return Promise.resolve(
+      misunderstood(state, {
+        text: 'Seu pedido já está a caminho!',
+        buttons: [HUMAN_BUTTON],
+      }),
     );
   }
   return Promise.resolve(

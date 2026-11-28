@@ -69,10 +69,19 @@ A tabela fica em [`transitions.ts`](../src/conversation/transitions.ts). Qualque
 
 ## Regras de qualquer etapa
 
-- **Atendente:** pedir atendente encerra com passagem (handoff). Depois disso o bot só registra as mensagens, sem responder, até a sessão expirar.
+- **Atendente:** pedir atendente encerra com passagem (handoff). Depois disso o bot só registra as mensagens, sem responder, até a sessão expirar. Sem LLM, o código reconhece "atendente" e "falar com uma pessoa".
+- **Passagem automática (issue #13):** duas falhas de entendimento seguidas, reclamação, segunda recusa de pagamento e cancelamento após o despacho.
+- **Fora do horário (issue #13):** com `BUSINESS_HOURS` (e `BUSINESS_DAYS`, `BUSINESS_TIMEZONE`), o bot informa o horário e registra o pedido de atendimento. Feriados não são tratados.
+- **Tela do atendente (issue #13):** `http://localhost:3000/attendant` mostra motivo, dados coletados e conversa das últimas 20 passagens. É demonstração sem login: só em modo mock e só na própria máquina.
 - **Não entendeu:** repete a pergunta com botões; na segunda vez seguida, passa para o atendente.
 - **RevGás fora do ar:** mantém etapa e rascunho e oferece atendente. Falha só no `POST /sales` mantém o resumo para tentar de novo.
 - **LLM fora do ar ou no limite:** o turno segue como "não entendeu", com botões.
+
+## Tempo do pedido (issue #15)
+
+- **Total:** da primeira mensagem até o fim do turno que criou a venda.
+- **Etapas:** tempo no LLM e esperando a RevGás. Turnos, LLM e RevGás param de contar na venda, então alterar ou cancelar depois não muda os números.
+- **Leitura:** `GET /metrics?limit=50` traz o resumo e o histórico, sem telefone, endereço ou texto. Canceladas aparecem na lista, mas ficam fora das médias.
 
 ## Sessão
 
@@ -90,5 +99,5 @@ A tabela fica em [`transitions.ts`](../src/conversation/transitions.ts). Qualque
 | Área de entrega | Configurada pela revenda (`COVERAGE_*`); a API não tem | pergunta 6 da #1 |
 | Entregue | Sem estado de entrega ainda: alteração e cancelamento depois da entrega | #12 |
 | Cancelamento | Usa o primeiro motivo cadastrado | #12 |
-| Atendente | Sem resumo, sem horário de funcionamento, sem painel | #13 |
-| Despacho | `ConversationService.notifyDispatched`, ainda sem quem chame | #13, #16 |
+| Atendente | Tela só de leitura: não responde ao cliente nem encerra a passagem | demo |
+| Despacho | `ConversationService.notifyDispatched`, ainda sem quem chame | #16 |

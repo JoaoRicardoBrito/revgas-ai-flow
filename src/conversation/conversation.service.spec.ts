@@ -96,7 +96,12 @@ function setup(options: { cpfRequired?: boolean } = {}) {
     new MessageExtractor(llm),
     revgas,
     catalog,
-    { ttlMs: TTL_MS, cpfRequired: options.cpfRequired ?? false },
+    {
+      ttlMs: TTL_MS,
+      cpfRequired: options.cpfRequired ?? false,
+      // Turno instantâneo, para os horários esperados serem exatos.
+      clock: () => 0,
+    },
   );
   let seq = 0;
   const send = (
