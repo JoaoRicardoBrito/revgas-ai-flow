@@ -1,4 +1,5 @@
 import { performance } from 'node:perf_hooks';
+import type { BusinessHours } from '../attendant/business-hours.js';
 import type {
   Channel,
   ConversationStore,
@@ -66,6 +67,8 @@ export interface ConversationServiceOptions {
   coverage?: Coverage;
   /** Relógio em ms para medir o turno. Trocável só em teste. */
   clock?: () => number;
+  /** Horário do atendimento humano. */
+  businessHours?: BusinessHours;
 }
 
 /**
@@ -198,10 +201,12 @@ export class ConversationService {
         revgas: this.revgas,
         catalog: this.catalog,
         contact,
+        now: at,
         settings: {
           cpfRequired: this.options.cpfRequired ?? false,
           pixDemo: this.options.pixDemo ?? false,
           coverage: this.options.coverage,
+          businessHours: this.options.businessHours,
         },
       }),
     );

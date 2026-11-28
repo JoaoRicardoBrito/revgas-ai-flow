@@ -5,6 +5,7 @@ import {
   messages,
   orderMetrics,
   type Conversation,
+  type Message,
   type OrderMetrics,
 } from './schema.js';
 
@@ -13,6 +14,12 @@ export type Channel = Conversation['channel'];
 export interface OrderRow {
   channel: Channel;
   metrics: OrderMetrics;
+}
+
+export interface Handoff {
+  conversation: Conversation;
+  metrics: OrderMetrics;
+  messages: Message[];
 }
 
 export interface InboundMessage {
@@ -185,6 +192,31 @@ export class ConversationStore {
         .where(eq(conversations.id, conversationId));
       return row;
     });
+  }
+
+  /** Passagens para atendente, a mais recente primeiro. */
+  async listHandoffs(limit = 20): Promise<Handoff[]> {
+    const rows = await this.db
+      .select({ conversation: conversations, metrics: orderMetrics })
+      .from(orderMetrics)
+      .innerJoin(
+        conversations,
+        eq(conversations.id, orderMetrics.conversationId),
+      )
+      .where(eq(orderMetrics.handedOff, true))
+      .orderBy(sql`${orderMetrics.handedOffAt} DESC`)
+      .limit(limit);
+    return Promise.all(
+      rows.map(async (row) => ({
+        ...row,
+        messages: await this.db
+          .select()
+          .from(messages)
+          .where(eq(messages.conversationId, row.conversation.id))
+          // Mesmo instante: a mensagem do cliente vem antes da resposta.
+          .orderBy(messages.createdAt, messages.direction),
+      })),
+    );
   }
 
   async getMetrics(conversationId: string): Promise<OrderMetrics | undefined> {

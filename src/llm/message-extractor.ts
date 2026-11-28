@@ -47,7 +47,7 @@ export const SYSTEM_PROMPT = [
   'Extraia só o que o cliente disse. Campo não citado é null. Não invente.',
   'productSizeKg: 13 para "P13" ou "botijão de 13"; sem número, null.',
   'productRelative: "maior" = bigger, "menor" = smaller.',
-  'intent: repeat_last para "o mesmo de sempre"; human para pedir atendente ou pessoa; confirm ou deny para sim ou não; other para pedidos fora de gás.',
+  'intent: repeat_last para "o mesmo de sempre"; human para pedir atendente ou pessoa; complaint para reclamação (atraso, produto errado, cobrança); confirm ou deny para sim ou não; other para pedidos fora de gás.',
 ].join('\n');
 
 export interface MessageExtractorOptions {
