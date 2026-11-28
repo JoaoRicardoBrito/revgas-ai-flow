@@ -1,0 +1,106 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+  --accent: #0e7a4a;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+main {
+  display: flex;
+  flex-direction: column;
+  max-width: 34rem;
+  height: 100dvh;
+  margin: 0 auto;
+}
+header,
+form {
+  padding: 0.75rem;
+}
+h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+select,
+input,
+button {
+  font: inherit;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid color-mix(in srgb, CanvasText 25%, Canvas);
+}
+section {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+section > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+section > div.customer {
+  align-items: flex-end;
+}
+section p {
+  margin: 0;
+  max-width: 85%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, CanvasText 8%, Canvas);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+section > div.customer p {
+  background: var(--accent);
+  color: white;
+}
+section > p.system,
+section > div.system p {
+  align-self: center;
+  background: none;
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+.options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.options.list {
+  flex-direction: column;
+}
+.options button {
+  border-color: var(--accent);
+  background: Canvas;
+  color: CanvasText;
+  cursor: pointer;
+}
+form {
+  display: flex;
+  gap: 0.5rem;
+}
+input {
+  flex: 1;
+  min-width: 0;
+}
+form button {
+  background: var(--accent);
+  color: white;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

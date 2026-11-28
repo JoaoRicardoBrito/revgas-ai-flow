@@ -6,6 +6,7 @@ import { DatabaseModule } from './database/database.module.js';
 import { HealthController } from './health/health.controller.js';
 import { LlmModule } from './llm/llm.module.js';
 import { RevgasModule } from './revgas/revgas.module.js';
+import { SimulatorModule } from './simulator/simulator.module.js';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { RevgasModule } from './revgas/revgas.module.js';
     LlmModule,
     RevgasModule,
     ConversationModule,
+    SimulatorModule,
   ],
   controllers: [HealthController],
 })
