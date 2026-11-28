@@ -1,6 +1,7 @@
 import { Logger, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../config/env.schema.js';
+import { timedRevgas } from '../metrics/revgas-timing.js';
 import {
   FAKE_API_KEY,
   FAKE_BASE_URL,
@@ -31,22 +32,26 @@ import { REVGAS_CLIENT, type RevgasClient } from './revgas-client.js';
         const logger = new Logger('RevgasModule');
         if (config.get('REVGAS_USE_MOCK', { infer: true })) {
           logger.log('RevGás em modo mock: nenhuma chamada à API real');
-          return new HttpRevgasClient({
-            baseUrl: FAKE_BASE_URL,
-            apiKey: FAKE_API_KEY,
-            establishmentId: FAKE_ESTABLISHMENT_ID,
-            fetch: fake.fetch,
-            minIntervalMs: 0,
-          });
+          return timedRevgas(
+            new HttpRevgasClient({
+              baseUrl: FAKE_BASE_URL,
+              apiKey: FAKE_API_KEY,
+              establishmentId: FAKE_ESTABLISHMENT_ID,
+              fetch: fake.fetch,
+              minIntervalMs: 0,
+            }),
+          );
         }
         logger.warn('RevGás em modo real: chamadas vão para a API de produção');
-        return new HttpRevgasClient({
-          baseUrl: config.get('REVGAS_API_BASE_URL', { infer: true }),
-          // O schema de ambiente garante a chave e o estabelecimento fora do mock.
-          apiKey: config.get('REVGAS_API_KEY', { infer: true }) ?? '',
-          establishmentId:
-            config.get('REVGAS_ESTABLISHMENT_ID', { infer: true }) ?? 0,
-        });
+        return timedRevgas(
+          new HttpRevgasClient({
+            baseUrl: config.get('REVGAS_API_BASE_URL', { infer: true }),
+            // O schema de ambiente garante a chave e o estabelecimento fora do mock.
+            apiKey: config.get('REVGAS_API_KEY', { infer: true }) ?? '',
+            establishmentId:
+              config.get('REVGAS_ESTABLISHMENT_ID', { infer: true }) ?? 0,
+          }),
+        );
       },
     },
   ],

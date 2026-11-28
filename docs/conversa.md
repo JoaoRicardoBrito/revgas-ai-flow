@@ -74,6 +74,12 @@ A tabela fica em [`transitions.ts`](../src/conversation/transitions.ts). Qualque
 - **RevGás fora do ar:** mantém etapa e rascunho e oferece atendente. Falha só no `POST /sales` mantém o resumo para tentar de novo.
 - **LLM fora do ar ou no limite:** o turno segue como "não entendeu", com botões.
 
+## Tempo do pedido (issue #15)
+
+- **Total:** da primeira mensagem até o fim do turno que criou a venda.
+- **Etapas:** tempo no LLM e esperando a RevGás. Turnos, LLM e RevGás param de contar na venda, então alterar ou cancelar depois não muda os números.
+- **Leitura:** `GET /metrics?limit=50` traz o resumo e o histórico, sem telefone, endereço ou texto. Canceladas aparecem na lista, mas ficam fora das médias.
+
 ## Sessão
 
 - Uma conversa ativa por contato (canal + telefone).

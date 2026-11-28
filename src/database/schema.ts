@@ -113,7 +113,7 @@ export const orderMetrics = pgTable(
     /** Primeira criação da venda. Alterar ou recriar depois não muda. */
     saleCreatedAt: timestamp('sale_created_at', { withTimezone: true }),
     revgasSaleId: integer('revgas_sale_id'),
-    /** Mensagens do cliente nesta conversa. */
+    /** Mensagens do cliente até a venda. */
     turns: integer('turns').notNull().default(0),
     handedOff: boolean('handed_off').notNull().default(false),
     handedOffAt: timestamp('handed_off_at', { withTimezone: true }),
