@@ -16,11 +16,14 @@ stateDiagram-v2
     confirming --> collecting: alterar, esgotou, pagamento recusado
     confirming --> sale_created: confirmou e a venda foi criada
     sale_created --> dispatched: revenda despachou
+    sale_created --> delivered: revenda entregou
+    dispatched --> delivered: revenda entregou
     identifying --> closed
     collecting --> closed
     confirming --> closed
     sale_created --> closed
     dispatched --> closed
+    delivered --> closed
     closed --> [*]
 ```
 
@@ -67,6 +70,20 @@ A tabela fica em [`transitions.ts`](../src/conversation/transitions.ts). Qualque
 - **Depois da venda, antes do despacho (PRD 6.1):** o bot propõe a alteração com o novo total e só chama `PUT /sales/{id}` depois do "Confirmar alteração". Revalida cobertura e estoque (consulta na hora, contando só o que aumenta). Se a RevGás recusar (ex.: venda já confirmada), passa para o atendente.
 - **Depois do despacho:** produto não muda; endereço só com atendente.
 
+## Cancelamento por estado do pedido (issue #12)
+
+O estado real do pedido está na RevGás: quem despacha e entrega é a revenda. Por isso, a cada mensagem depois da venda o código consulta `GET /sales/{id}` antes de responder; se a RevGás estiver fora, o bot não age às cegas (mantém a etapa e oferece atendente).
+
+| Estado | O que o bot faz |
+|--------|-----------------|
+| Antes da venda | Encerra a conversa. O motivo registrado é a etapa em que desistiu (coletando dados ou no resumo), sem perguntar nada a quem está saindo |
+| Venda criada, não despachada | Pergunta o motivo, com os motivos ativos da RevGás em botões (até 9, mais "Não cancelar"), e só cancela depois do toque. O motivo vai na chamada `PUT /sales/{id}/cancel` e nas métricas (`cancel_reason`). Recusa da RevGás (ex.: já conferida): atendente |
+| Despachado | Cancelamento e reclamação vão para o atendente, que combina com o entregador |
+| Entregue | Não cancela nem altera; reclamação vai ao atendente. Outra mensagem agradece e encerra a conversa, para a próxima abrir um pedido novo |
+| Cancelada pela revenda | Avisa, encerra e registra "cancelada pela revenda" |
+
+Se a revenda despacha entre a pergunta do motivo e a resposta, o bot não cancela: a etapa muda e o pedido pendente é descartado.
+
 ## Regras de qualquer etapa
 
 - **Atendente:** pedir atendente encerra com passagem (handoff). Depois disso o bot só registra as mensagens, sem responder, até a sessão expirar.
@@ -88,7 +105,6 @@ A tabela fica em [`transitions.ts`](../src/conversation/transitions.ts). Qualque
 | Preço | `PRODUCT_PRICES` configurado pela revenda (a API não tem preço); recorrente paga o do último pedido. Sem tabela: demonstração no mock, nada à venda no modo real | pergunta 2 da #1 |
 | Fiado e vale gás | Fiado com limite de crédito no cadastro; vale gás com categoria "vale gás" (suposição) | pergunta 13 da #1 |
 | Área de entrega | Configurada pela revenda (`COVERAGE_*`); a API não tem | pergunta 6 da #1 |
-| Entregue | Sem estado de entrega ainda: alteração e cancelamento depois da entrega | #12 |
-| Cancelamento | Usa o primeiro motivo cadastrado | #12 |
+| Estado do pedido | Despachado = entregador atribuído ou status WARNING; entregue = `delivered_at` (suposição, a documentação não descreve os estados) | pergunta 14 da #1 |
 | Atendente | Sem resumo, sem horário de funcionamento, sem painel | #13 |
 | Despacho | `ConversationService.notifyDispatched`, ainda sem quem chame | #13, #16 |

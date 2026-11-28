@@ -401,6 +401,8 @@ function toSale(dto: SaleDto): Sale {
     id: dto.id,
     status: dto.status,
     customerId: dto.customer_id ?? null,
+    delivererId: dto.deliverer_id ?? null,
+    deliveredAt: dto.delivered_at ?? null,
     address: dto.location
       ? {
           street: dto.location,

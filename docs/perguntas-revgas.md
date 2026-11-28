@@ -26,6 +26,7 @@ Cada pergunta tem a suposição que usamos **até a resposta chegar**, para o de
 | 11 | Existe rota para criar cliente? `POST /customers` está correto? | O caminho foi inferido, não está na documentação | Rota `POST /customers` com nome, telefone e endereço | #3, #8 |
 | 12 | A listagem de vendas filtra por cliente (ou telefone)? | É assim que obtemos "o mesmo de sempre" | Filtro por cliente existe; usamos a venda mais recente | #3, #7 |
 | 13 | Como a revenda indica quem pode comprar fiado ou com vale gás? | Essas formas só aparecem para clientes autorizados (PRD 6.2) | Fiado: `credit_limit` maior que zero. Vale gás: categoria do cliente com "vale gás" no nome | #10 |
+| 14 | Como saber se a venda foi despachada ou entregue? | O bot só cancela antes do despacho (PRD 6.1) e precisa do estado real | Despachada: entregador atribuído (`deliverer_id`) ou status `WARNING`. Entregue: `delivered_at` preenchido | #12 |
 
 As perguntas 11 e 12 vêm da ADR 0001 e ainda não estão na lista da issue #1.
 
@@ -64,6 +65,10 @@ Somos o time do projeto de extensão do iCEV que está construindo o atendente c
 
 13. Como vocês indicam quais clientes podem comprar fiado ou com vale gás? Usamos o limite de crédito do cadastro para fiado e a categoria do cliente para vale gás. Está certo?
 
+**Sobre o estado da venda**
+
+14. Como identificamos que uma venda já foi despachada ou entregue? Hoje consideramos despachada quando há entregador atribuído (`deliverer_id`) ou o status é `WARNING` (Avisar), e entregue quando `delivered_at` vem preenchido. Está certo? Também: qual o prazo para cancelar (`allow_cancel_sale`)?
+
 Obrigado!
 Equipe RevGás AI Flow, iCEV
 
@@ -90,3 +95,4 @@ Respostas parciais vieram da [documentação pública](revgas-api.md) em 2026-11
 | 11 | Sim (docs): `POST /customers`; nenhum campo marcado como obrigatório | 2026-11-27 | Enviamos `name`, `type: PHYSICAL`, `phones` e endereço |
 | 12 | Sim (docs): `GET /sales?customer_id=`, mais recente primeiro, janela máxima de 366 dias | 2026-11-27 | `findLastSale` usa os últimos 365 dias |
 | 13 | | | |
+| 14 | | | |

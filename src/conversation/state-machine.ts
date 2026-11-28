@@ -9,6 +9,7 @@ import type {
 } from './conversation.types.js';
 import {
   closedHandler,
+  deliveredHandler,
   dispatchedHandler,
   saleCreatedHandler,
 } from './handlers/after-sale.handlers.js';
@@ -30,6 +31,7 @@ export const HANDLERS: Readonly<Record<Step, StepHandler>> = {
   confirming: confirmingHandler,
   sale_created: saleCreatedHandler,
   dispatched: dispatchedHandler,
+  delivered: deliveredHandler,
   closed: closedHandler,
 };
 
@@ -45,20 +47,90 @@ export async function runTurn(
   handlers: Readonly<Record<Step, StepHandler>> = HANDLERS,
 ): Promise<TurnOutcome> {
   let result: TurnOutcome;
+  let current = state;
   if (signal.intent === 'human' && state.step !== 'closed') {
     result = handoff(state.draft, 'cliente pediu atendente');
   } else {
     try {
-      result = await handlers[state.step](state, signal, ctx);
+      // Depois da venda, o estado real do pedido está na RevGás (issue #12).
+      const synced = await reconcile(state, ctx);
+      if ('ended' in synced) {
+        assertTransition(state.step, synced.ended.step);
+        return { ...synced.ended, replies: synced.ended.replies.map(present) };
+      }
+      current = synced.state;
+      assertTransition(state.step, current.step);
+      result = await handlers[current.step](current, signal, ctx);
     } catch (error) {
       if (!(error instanceof RevgasError)) throw error;
       // RevGás fora: não perde a conversa nem o rascunho (PRD seção 7).
       result = outcome(state.step, state.draft, [SYSTEM_UNAVAILABLE]);
+      current = state;
     }
   }
 
-  assertTransition(state.step, result.step);
+  assertTransition(current.step, result.step);
   return { ...result, replies: result.replies.map(present) };
+}
+
+/** Etapas em que o pedido pode mudar de estado fora da conversa. */
+const TRACKED_STEPS: readonly Step[] = ['sale_created', 'dispatched'];
+
+type Reconciled = { state: SessionState } | { ended: TurnOutcome };
+
+/**
+ * Confere o pedido na RevGás antes de responder. Quem cancela, despacha ou
+ * entrega é a revenda, não a conversa, então o bot age pelo estado real:
+ *
+ * - cancelada pela revenda: encerra e avisa;
+ * - entregue (`delivered_at`): etapa `delivered`;
+ * - despachada: entregador atribuído ou status WARNING. SUPOSIÇÃO: a
+ *   documentação não descreve os estados da venda (pergunta 3 da issue #1).
+ */
+async function reconcile(
+  state: SessionState,
+  ctx: TurnContext,
+): Promise<Reconciled> {
+  const saleId = state.draft.saleId;
+  if (!TRACKED_STEPS.includes(state.step) || saleId === null) return { state };
+
+  const sale = await ctx.revgas.getSale(saleId);
+  if (sale.status === 'CANCEL') {
+    const reason = 'cancelada pela revenda';
+    return {
+      ended: outcome(
+        'closed',
+        { ...state.draft, pendingChange: null, pendingCancel: false },
+        [
+          {
+            text: `O pedido nº ${saleId} foi cancelado pela revenda. Se quiser, é só fazer um novo pedido.`,
+          },
+        ],
+        [
+          { type: 'sale_canceled', saleId, reason },
+          { type: 'closed', status: 'canceled', reason },
+        ],
+      ),
+    };
+  }
+
+  let step: Step = state.step;
+  if (sale.deliveredAt) {
+    step = 'delivered';
+  } else if (
+    state.step === 'sale_created' &&
+    (sale.delivererId !== null || sale.status === 'WARNING')
+  ) {
+    step = 'dispatched';
+  }
+  if (step === state.step) return { state };
+  // Mudou de etapa: o que estava pendente (alteração, motivo) perdeu o sentido.
+  return {
+    state: {
+      step,
+      draft: { ...state.draft, pendingChange: null, pendingCancel: false },
+    },
+  };
 }
 
 /** WhatsApp aceita até 3 botões; mais que isso vira lista (issue #10). */
@@ -95,6 +167,7 @@ const BUTTON_INTENTS: Readonly<Record<string, Signal['intent']>> = {
   address: 'change_address',
   'save_address:yes': 'confirm',
   'save_address:no': 'deny',
+  'cancel_motive:keep': 'deny',
   'sale_change:confirm': 'confirm',
   'sale_change:keep': 'deny',
 };

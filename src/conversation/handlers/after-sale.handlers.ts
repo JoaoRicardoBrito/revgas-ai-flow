@@ -1,15 +1,19 @@
 import { RevgasError } from '../../revgas/revgas.errors.js';
 import { handoff, outcome, type StepHandler } from './handler.js';
+import { answerCancelMotive, askCancelMotive } from './sale-cancel.js';
 import { applyChange, proposeChange, wantsChange } from './sale-change.js';
 
 /**
+
  * Venda criada, ainda não despachada (PRD 6.1): o bot altera produto e
- * endereço (com revalidação) e cancela. Regras finas de cancelamento
- * ficam na issue #12.
+ * endereço (com revalidação) e cancela, perguntando o motivo antes.
  */
 export const saleCreatedHandler: StepHandler = async (state, signal, ctx) => {
   const saleId = state.draft.saleId;
   const { draft } = state;
+
+  // Resposta à pergunta do motivo do cancelamento (issue #12).
+  if (draft.pendingCancel) return answerCancelMotive(draft, signal, ctx);
 
   // Resposta à proposta de alteração.
   if (draft.pendingChange) {
@@ -71,24 +75,7 @@ export const saleCreatedHandler: StepHandler = async (state, signal, ctx) => {
   }
 
   if (signal.intent === 'cancel' && saleId !== null) {
-    try {
-      const [motive] = await ctx.revgas.listCancelMotives();
-      if (!motive)
-        return handoff(state.draft, 'cancelamento sem motivo cadastrado');
-      await ctx.revgas.cancelSale(saleId, motive.id);
-      return outcome(
-        'closed',
-        state.draft,
-        [{ text: `Pedido nº ${saleId} cancelado.` }],
-        [
-          { type: 'sale_canceled', saleId },
-          { type: 'closed', status: 'canceled' },
-        ],
-      );
-    } catch (error) {
-      if (!(error instanceof RevgasError)) throw error;
-      return handoff(state.draft, 'falha ao cancelar a venda');
-    }
+    return askCancelMotive(draft, ctx);
   }
   return outcome('sale_created', state.draft, [
     {
@@ -141,3 +128,43 @@ export const dispatchedHandler: StepHandler = (state, signal) => {
 /** Não deveria receber mensagem: o serviço abre conversa nova. */
 export const closedHandler: StepHandler = (state) =>
   Promise.resolve(outcome('closed', state.draft, []));
+
+/**
+ * Entregue (PRD 6.1): não cancela nem altera; reclamação vai ao atendente.
+ * Qualquer outra mensagem encerra a conversa, para a próxima abrir um
+ * pedido novo em vez de ficar presa neste.
+ */
+export const deliveredHandler: StepHandler = (state, signal) => {
+  const x = signal.extraction;
+  if (signal.intent === 'complaint') {
+    return Promise.resolve(handoff(state.draft, 'reclamação após entrega'));
+  }
+  const wantsToChange =
+    signal.intent === 'cancel' ||
+    signal.intent === 'change_product' ||
+    signal.intent === 'change_address' ||
+    signal.location !== null ||
+    Boolean(x?.productSizeKg || x?.productRelative || x?.address?.street);
+  if (wantsToChange) {
+    return Promise.resolve(
+      outcome('delivered', state.draft, [
+        {
+          text: 'Seu pedido já foi entregue, então não dá mais para cancelar nem alterar. Se houve algum problema, chamo um atendente.',
+          buttons: [{ id: 'human', label: 'Falar com atendente' }],
+        },
+      ]),
+    );
+  }
+  return Promise.resolve(
+    outcome(
+      'closed',
+      state.draft,
+      [
+        {
+          text: `Seu pedido nº ${state.draft.saleId ?? ''} foi entregue. Obrigado! Para um novo pedido, é só chamar de novo.`,
+        },
+      ],
+      [{ type: 'closed', status: 'completed' }],
+    ),
+  );
+};
