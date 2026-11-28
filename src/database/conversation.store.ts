@@ -306,12 +306,22 @@ export class ConversationStore {
   }
 
   /** Pedido cancelado pelo cliente (antes ou depois da venda). */
-  async markCanceled(conversationId: string, at: Date): Promise<void> {
+  async markCanceled(
+    conversationId: string,
+    at: Date,
+    reason?: string,
+  ): Promise<void> {
     await this.db
       .update(orderMetrics)
       .set({
         outcome: 'canceled',
         canceledAt: sql`COALESCE(${orderMetrics.canceledAt}, ${at.toISOString()}::timestamptz)`,
+        // O primeiro motivo vale: a venda cancelada gera dois eventos.
+        ...(reason
+          ? {
+              cancelReason: sql`COALESCE(${orderMetrics.cancelReason}, ${reason})`,
+            }
+          : {}),
       })
       .where(eq(orderMetrics.conversationId, conversationId));
   }

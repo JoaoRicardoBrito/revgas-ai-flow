@@ -120,6 +120,8 @@ export const orderMetrics = pgTable(
     handoffReason: text('handoff_reason'),
     outcome: orderOutcome('outcome').notNull().default('in_progress'),
     canceledAt: timestamp('canceled_at', { withTimezone: true }),
+    /** Por que o pedido foi cancelado (issue #12). Sem dados pessoais. */
+    cancelReason: text('cancel_reason'),
     /** Tempo acumulado em chamadas ao LLM e à RevGás (issue #15). */
     llmMs: integer('llm_ms').notNull().default(0),
     revgasMs: integer('revgas_ms').notNull().default(0),

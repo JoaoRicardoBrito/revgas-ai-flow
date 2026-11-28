@@ -227,16 +227,26 @@ describe('confirmação', () => {
     const result = await runTurn(summary, tapped('cancel'), ctx);
 
     expect(result.step).toBe('closed');
-    expect(result.events).toEqual([{ type: 'closed', status: 'canceled' }]);
+    expect(result.events).toEqual([
+      {
+        type: 'closed',
+        status: 'canceled',
+        reason: 'desistiu antes da venda (no resumo)',
+      },
+    ]);
     expect(fake.sales).toHaveLength(salesBefore);
   });
 });
 
 describe('depois da venda', () => {
-  it('cancelar antes do despacho cancela a venda na RevGás', async () => {
+  it('cancelar antes do despacho pergunta o motivo e só então cancela', async () => {
     const { fake, ctx, sold } = await afterSale();
 
-    const result = await runTurn(sold, said({ intent: 'cancel' }), ctx);
+    const ask = await runTurn(sold, said({ intent: 'cancel' }), ctx);
+    expect(ask.step).toBe('sale_created');
+    expect(fake.sales.at(-1)?.status).not.toBe('CANCEL');
+
+    const result = await runTurn(ask, tapped('cancel_motive:1'), ctx);
 
     expect(result.step).toBe('closed');
     expect(fake.sales.at(-1)?.status).toBe('CANCEL');

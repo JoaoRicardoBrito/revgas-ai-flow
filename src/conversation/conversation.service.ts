@@ -248,14 +248,14 @@ export class ConversationService {
           await this.store.markSaleCreated(id, event.saleId, saleAt);
           break;
         case 'sale_canceled':
-          await this.store.markCanceled(id, at);
+          await this.store.markCanceled(id, at, event.reason);
           break;
         case 'handoff':
           await this.store.markHandedOff(id, event.reason, at);
           break;
         case 'closed':
           if (event.status === 'canceled')
-            await this.store.markCanceled(id, at);
+            await this.store.markCanceled(id, at, event.reason);
           await this.store.closeConversation(id, 'completed', at);
           break;
         case 'customer_identified':

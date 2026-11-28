@@ -10,7 +10,8 @@ import {
 
 /** Falta algum dado: aplica o turno e pergunta o próximo campo. */
 export const collectingHandler: StepHandler = async (state, signal, ctx) => {
-  if (signal.intent === 'cancel') return canceledBeforeSale(state.draft);
+  if (signal.intent === 'cancel')
+    return canceledBeforeSale(state.draft, 'collecting');
 
   const offer = await loadOffer(ctx);
   const applied = applySignal(state.draft, signal, offer);

@@ -177,11 +177,25 @@ export function handoff(draft: Draft, reason: string): TurnOutcome {
   );
 }
 
-export function canceledBeforeSale(draft: Draft): TurnOutcome {
+/**
+ * Cancelou antes de existir venda (PRD 6.1): só encerra a conversa. O motivo
+ * registrado é a etapa em que desistiu, útil para ver onde o fluxo perde
+ * gente sem perguntar nada a quem já está saindo.
+ */
+export function canceledBeforeSale(
+  draft: Draft,
+  step: 'collecting' | 'confirming',
+): TurnOutcome {
   return outcome(
     'closed',
     draft,
     [{ text: 'Tudo bem, pedido cancelado. Quando quiser, é só chamar.' }],
-    [{ type: 'closed', status: 'canceled' }],
+    [
+      {
+        type: 'closed',
+        status: 'canceled',
+        reason: `desistiu antes da venda (${step === 'collecting' ? 'coletando dados' : 'no resumo'})`,
+      },
+    ],
   );
 }

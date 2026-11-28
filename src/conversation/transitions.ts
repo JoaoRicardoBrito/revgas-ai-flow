@@ -8,8 +8,9 @@ export const TRANSITIONS: Readonly<Record<Step, readonly Step[]>> = {
   identifying: ['collecting', 'confirming', 'closed'],
   collecting: ['confirming', 'closed'],
   confirming: ['collecting', 'sale_created', 'closed'],
-  sale_created: ['dispatched', 'closed'],
-  dispatched: ['closed'],
+  sale_created: ['dispatched', 'delivered', 'closed'],
+  dispatched: ['delivered', 'closed'],
+  delivered: ['closed'],
   closed: [],
 };
 

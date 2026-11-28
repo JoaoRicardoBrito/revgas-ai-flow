@@ -71,6 +71,8 @@ export const saleDto = z.object({
   status: z.enum(SALE_STATUSES),
   total: money.nullish(),
   customer_id: z.number().nullish(),
+  deliverer_id: z.number().nullish(),
+  delivered_at: text,
   location: text,
   number: text,
   neighborhood: text,

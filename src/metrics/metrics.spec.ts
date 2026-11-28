@@ -89,6 +89,7 @@ describe('métrica do tempo do pedido (issue #15)', () => {
     await tap('repeat', at(0));
     await tap('confirm', at(8));
     await tap('cancel', at(20));
+    await tap('cancel_motive:1', at(25));
 
     const result = await report();
 

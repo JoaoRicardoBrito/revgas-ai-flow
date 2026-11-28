@@ -58,6 +58,11 @@ export interface FakeSale {
   id: number;
   status: SaleStatus;
   total: number;
+  deliverer_id: number | null;
+  deliverer_name: string | null;
+  delivered_at: string | null;
+  /** Motivo recebido em PUT /sales/{id}/cancel. */
+  cancel_motive_id: number | null;
   channel: string;
   origin: string;
   customer_id: number | null;
@@ -191,6 +196,26 @@ export class FakeRevgasApi {
 
   setStock(productId: number, quantity: number): void {
     this.product(productId).stock_quantity = quantity;
+  }
+
+  /** A revenda despachou: entregador atribuído (SUPOSIÇÃO, pergunta 3 da #1). */
+  dispatchSale(saleId: number): void {
+    const sale = this.saleById(saleId);
+    sale.deliverer_id = 7;
+    sale.deliverer_name = 'Entregador Exemplo';
+  }
+
+  /** O entregador entregou. */
+  deliverSale(saleId: number): void {
+    const sale = this.saleById(saleId);
+    this.dispatchSale(saleId);
+    sale.delivered_at = this.options.now().toISOString();
+  }
+
+  private saleById(saleId: number): FakeSale {
+    const sale = this.sales.find((s) => s.id === saleId);
+    if (!sale) throw new Error(`Venda ${saleId} não existe no fake`);
+    return sale;
   }
 
   /** Simula a revenda mudando o status (ex.: despacho, conferência). */
@@ -481,6 +506,10 @@ export class FakeRevgasApi {
       origin: str(body.origin) ?? 'REVGAS',
       customer_id: result.customerId,
       customer_name: customer?.name ?? null,
+      deliverer_id: null,
+      deliverer_name: null,
+      delivered_at: null,
+      cancel_motive_id: null,
       establishment_id: Number(body.establishment_id ?? FAKE_ESTABLISHMENT_ID),
       ...saleAddress(body),
       observation: str(body.observation),
@@ -543,12 +572,18 @@ export class FakeRevgasApi {
         { field: 'motive_cancel_sale_id', message: 'invalid motive' },
       ]);
     }
-    // SUPOSIÇÃO (pergunta 1 da #1): venda cancelada ou conferida não cancela.
-    if (sale.status === 'CANCEL' || sale.status === 'CHECK') {
+    // SUPOSIÇÃO (pergunta 1 da #1): venda cancelada, conferida ou já
+    // entregue não cancela.
+    if (
+      sale.status === 'CANCEL' ||
+      sale.status === 'CHECK' ||
+      sale.delivered_at !== null
+    ) {
       return json(400, {
         message: `sale with status ${sale.status} cannot be canceled`,
       });
     }
+    sale.cancel_motive_id = motive.id;
     this.setStatus(sale, 'CANCEL');
     for (const item of sale.products) {
       this.product(item.product_id).stock_quantity += item.quantity;

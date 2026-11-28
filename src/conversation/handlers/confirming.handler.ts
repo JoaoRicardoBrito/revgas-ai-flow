@@ -29,7 +29,8 @@ import {
 
 /** Resumo na tela: "sim" cria a venda; o resto ajusta ou cancela. */
 export const confirmingHandler: StepHandler = async (state, signal, ctx) => {
-  if (signal.intent === 'cancel') return canceledBeforeSale(state.draft);
+  if (signal.intent === 'cancel')
+    return canceledBeforeSale(state.draft, 'confirming');
 
   const offer = await loadOffer(ctx);
 

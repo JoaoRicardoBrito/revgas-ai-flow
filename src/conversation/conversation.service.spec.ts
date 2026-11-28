@@ -266,8 +266,10 @@ describe('ConversationService', () => {
     expect(canceled.step).toBe('closed');
     const conversation = await store.getConversation(canceled.conversationId);
     expect(conversation?.status).toBe('completed');
-    expect((await store.getMetrics(canceled.conversationId))?.outcome).toBe(
-      'canceled',
+    const metrics = await store.getMetrics(canceled.conversationId);
+    expect(metrics?.outcome).toBe('canceled');
+    expect(metrics?.cancelReason).toBe(
+      'desistiu antes da venda (coletando dados)',
     );
   });
 
@@ -429,5 +431,82 @@ describe('ConversationService: localização (issue #11)', () => {
 
     expect(llm.calls).toBe(before);
     expect(result.replies[0]?.text).toMatch(/Recebi sua localização/);
+  });
+});
+
+async function withSale() {
+  const s = setup();
+  await s.send(RECURRING, { text: 'o mesmo de sempre' }, at(0)).result;
+  const sold = await s.send(RECURRING, { buttonId: 'confirm' }, at(5)).result;
+  return { ...s, sold };
+}
+
+describe('ConversationService: cancelamento (issue #12)', () => {
+  it('cancelar a venda grava o motivo escolhido nas métricas', async () => {
+    const { send, sold, fake } = await withSale();
+
+    const ask = await send(RECURRING, { text: 'cancela' }, at(20)).result;
+    expect(ask.replies[0]?.buttons?.map((b) => b.id)).toContain(
+      'cancel_motive:2',
+    );
+    const done = await send(RECURRING, { buttonId: 'cancel_motive:2' }, at(30))
+      .result;
+
+    expect(done.step).toBe('closed');
+    const metrics = await store.getMetrics(sold.conversationId);
+    expect(metrics).toMatchObject({
+      outcome: 'canceled',
+      cancelReason: 'Pedido duplicado',
+      canceledAt: at(30),
+      // O tempo do pedido não muda por cancelar depois.
+      saleCreatedAt: at(5),
+    });
+    expect(fake.sales.at(-1)).toMatchObject({
+      status: 'CANCEL',
+      cancel_motive_id: 2,
+    });
+    expect((await store.getConversation(sold.conversationId))?.status).toBe(
+      'completed',
+    );
+  });
+
+  it('despacho pela revenda muda a etapa salva e manda cancelamento ao atendente', async () => {
+    const { send, sold, fake } = await withSale();
+    fake.dispatchSale(fake.sales.at(-1)?.id ?? 0);
+
+    const result = await send(RECURRING, { text: 'cancela' }, at(20)).result;
+
+    expect(result.step).toBe('closed');
+    const metrics = await store.getMetrics(sold.conversationId);
+    expect(metrics).toMatchObject({ handedOff: true, outcome: 'sale_created' });
+    expect(fake.sales.at(-1)?.status).not.toBe('CANCEL');
+  });
+
+  it('entrega pela revenda grava a etapa delivered, e a conversa segue aberta', async () => {
+    const { send, sold, fake } = await withSale();
+    fake.deliverSale(fake.sales.at(-1)?.id ?? 0);
+
+    const result = await send(RECURRING, { text: 'cancela' }, at(20)).result;
+
+    expect(result.step).toBe('delivered');
+    const conversation = await store.getConversation(sold.conversationId);
+    expect(conversation).toMatchObject({ step: 'delivered', status: 'active' });
+    expect((await store.getMetrics(sold.conversationId))?.outcome).toBe(
+      'sale_created',
+    );
+  });
+
+  it('venda cancelada pela revenda fecha a conversa e registra o motivo', async () => {
+    const { send, sold, fake } = await withSale();
+    fake.setSaleStatus(fake.sales.at(-1)?.id ?? 0, 'CANCEL');
+
+    const result = await send(RECURRING, { text: 'oi' }, at(20)).result;
+
+    expect(result.step).toBe('closed');
+    const metrics = await store.getMetrics(sold.conversationId);
+    expect(metrics).toMatchObject({
+      outcome: 'canceled',
+      cancelReason: 'cancelada pela revenda',
+    });
   });
 });

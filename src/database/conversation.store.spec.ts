@@ -112,6 +112,23 @@ describe('ConversationStore', () => {
     await expect(connection.db.insert(messages).values(row)).rejects.toThrow();
   });
 
+  it('o primeiro motivo de cancelamento vale; o seguinte não o troca', async () => {
+    const { conversation } = await store.findOrStartActive(
+      'simulator',
+      'sim-6',
+      at(0),
+    );
+
+    await store.markCanceled(conversation.id, at(10), 'Pedido duplicado');
+    await store.markCanceled(conversation.id, at(20), 'Outro motivo');
+
+    expect(await store.getMetrics(conversation.id)).toMatchObject({
+      outcome: 'canceled',
+      cancelReason: 'Pedido duplicado',
+      canceledAt: at(10),
+    });
+  });
+
   it('sale_created_at fica na primeira venda, mesmo se recriada', async () => {
     const { conversation } = await store.findOrStartActive(
       'simulator',

@@ -15,6 +15,8 @@ export const STEPS = [
   'sale_created',
   /** Entregador a caminho (avisado pela revenda). */
   'dispatched',
+  /** Entregue: sem cancelamento; reclamação vai ao atendente (PRD 6.1). */
+  'delivered',
   /** Conversa terminada: concluída, cancelada, abandonada ou com atendente. */
   'closed',
 ] as const;
@@ -84,6 +86,8 @@ export const draftSchema = z.object({
   /** Venda criada a partir do último pedido ("o mesmo de sempre"). */
   fromLastOrder: z.boolean().default(false),
   saleId: z.number().nullable().default(null),
+  /** Pediu para cancelar a venda: esperando o motivo (issue #12). */
+  pendingCancel: z.boolean().default(false),
   /** Venda criada com endereço novo: perguntamos se salva no cadastro. */
   pendingAddressSave: z.boolean().default(false),
   /** Localização recebida, esperando rua, número e bairro (issue #11). */
@@ -156,9 +160,9 @@ export interface Signal {
 export type TurnEvent =
   | { type: 'customer_identified'; customerId: number | null }
   | { type: 'sale_created'; saleId: number }
-  | { type: 'sale_canceled'; saleId: number }
+  | { type: 'sale_canceled'; saleId: number; reason: string }
   | { type: 'handoff'; reason: string }
-  | { type: 'closed'; status: 'completed' | 'canceled' };
+  | { type: 'closed'; status: 'completed' | 'canceled'; reason?: string };
 
 export interface SessionState {
   step: Step;

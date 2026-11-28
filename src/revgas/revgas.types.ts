@@ -111,6 +111,10 @@ export interface Sale {
   id: number;
   status: SaleStatus;
   customerId: number | null;
+  /** Entregador atribuído: indica que a revenda despachou (suposição, #1). */
+  delivererId: number | null;
+  /** Preenchido quando a venda foi entregue. */
+  deliveredAt: string | null;
   address: Address | null;
   items: SaleItem[];
   payments: SalePayment[];

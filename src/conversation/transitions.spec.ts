@@ -17,8 +17,11 @@ const allowed: [Step, Step][] = [
   ['confirming', 'sale_created'],
   ['confirming', 'closed'],
   ['sale_created', 'dispatched'],
+  ['sale_created', 'delivered'],
   ['sale_created', 'closed'],
+  ['dispatched', 'delivered'],
   ['dispatched', 'closed'],
+  ['delivered', 'closed'],
 ];
 
 describe('transições', () => {
