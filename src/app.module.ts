@@ -8,6 +8,7 @@ import { HealthController } from './health/health.controller.js';
 import { LlmModule } from './llm/llm.module.js';
 import { MetricsModule } from './metrics/metrics.module.js';
 import { RevgasModule } from './revgas/revgas.module.js';
+import { SimulatorModule } from './simulator/simulator.module.js';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { RevgasModule } from './revgas/revgas.module.js';
     LlmModule,
     RevgasModule,
     ConversationModule,
+    SimulatorModule,
     MetricsModule,
     AttendantModule,
   ],
