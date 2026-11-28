@@ -41,6 +41,8 @@ npm run demo   # compila e sobe; abra http://localhost:3000/chat/
 
 A tela usa o mesmo núcleo de conversa do canal WhatsApp. Escolha o cliente simulado (recorrente, sem pedidos ou novo). Sem `GROQ_API_KEY`, só os botões são entendidos; para escrever livremente, use uma chave do plano gratuito da Groq. O simulador só responde em modo mock e na própria máquina.
 
+Ao lado do chat, o painel de tempo mostra o cronômetro do pedido, a comparação com os 5 minutos de hoje e o histórico com o tempo por etapa (LLM, RevGás e o restante, que é principalmente o cliente respondendo).
+
 Para mexer na tela com recarga automática, rode `npm run start:dev` e, em outro terminal, `npm run web:dev` (http://localhost:5173/chat/).
 
 | Comando | O que faz |
