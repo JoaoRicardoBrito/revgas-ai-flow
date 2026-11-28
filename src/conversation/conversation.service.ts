@@ -1,3 +1,4 @@
+import type { BusinessHours } from '../attendant/business-hours.js';
 import type {
   Channel,
   ConversationStore,
@@ -62,6 +63,8 @@ export interface ConversationServiceOptions {
   pixDemo?: boolean;
   /** Área de entrega da revenda. */
   coverage?: Coverage;
+  /** Horário do atendimento humano. */
+  businessHours?: BusinessHours;
 }
 
 /**
@@ -191,10 +194,12 @@ export class ConversationService {
       revgas: this.revgas,
       catalog: this.catalog,
       contact,
+      now: at,
       settings: {
         cpfRequired: this.options.cpfRequired ?? false,
         pixDemo: this.options.pixDemo ?? false,
         coverage: this.options.coverage,
+        businessHours: this.options.businessHours,
       },
     });
     await this.persist(conversation, result, at);
