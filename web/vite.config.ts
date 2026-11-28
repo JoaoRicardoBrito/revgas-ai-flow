@@ -5,6 +5,9 @@ export default defineConfig({
   base: '/chat/',
   server: {
     // `npm run web:dev`: a API continua no Nest, na porta 3000.
-    proxy: { '/simulator': { target: 'http://localhost:3000' } },
+    proxy: {
+      '/simulator': { target: 'http://localhost:3000' },
+      '/metrics': { target: 'http://localhost:3000' },
+    },
   },
 });

@@ -15,6 +15,8 @@ export interface Reply {
 }
 
 export interface Answer {
+  conversationId: string;
+  step: string;
   replies: Reply[];
   /** Com atendente: o bot não responde. */
   silenced: boolean;
@@ -49,4 +51,27 @@ export async function sendMessage(
   });
   const answer: Answer = await response.json();
   return answer;
+}
+
+/** Resposta de `GET /metrics` (issue #15). */
+export interface OrderTiming {
+  conversationId: string;
+  outcome: string;
+  firstMessageAt: string;
+  turns: number;
+  totalMs: number | null;
+  llmMs: number;
+  revgasMs: number;
+}
+
+export interface Metrics {
+  baselineMs: number;
+  summary: { sales: number; averageTotalMs: number | null };
+  orders: OrderTiming[];
+}
+
+export async function fetchMetrics(): Promise<Metrics> {
+  const response = await request('/metrics?limit=20');
+  const metrics: Metrics = await response.json();
+  return metrics;
 }
