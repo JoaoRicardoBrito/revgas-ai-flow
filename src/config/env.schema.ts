@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  DAYS_PATTERN,
+  isValidHours,
+  isValidTimeZone,
+} from '../attendant/business-hours.js';
 import { isValidPriceList } from './price-list.js';
 
 /**
@@ -47,6 +52,22 @@ export const envSchema = z
       .optional(),
     /** Raio de entrega em km a partir de COVERAGE_CENTER. */
     COVERAGE_RADIUS_KM: z.coerce.number().positive().max(200).optional(),
+    /** Horário do atendimento humano, ex.: "08:00-18:00". Vazio: sempre. */
+    BUSINESS_HOURS: z
+      .string()
+      .optional()
+      .refine((v) => v === undefined || isValidHours(v), {
+        message: 'use HH:MM-HH:MM, ex.: 08:00-18:00',
+      }),
+    /** Dias com atendimento: 0 = domingo ... 6 = sábado. */
+    BUSINESS_DAYS: z
+      .string()
+      .regex(DAYS_PATTERN, { message: 'use dias de 0 a 6, ex.: 1,2,3,4,5,6' })
+      .default('1,2,3,4,5,6'),
+    BUSINESS_TIMEZONE: z
+      .string()
+      .refine(isValidTimeZone, { message: 'fuso horário desconhecido' })
+      .default('America/Fortaleza'),
     /** Cache de produtos e formas de pagamento, em segundos. */
     CATALOG_CACHE_SECONDS: z.coerce
       .number()

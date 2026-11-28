@@ -216,7 +216,7 @@ describe('despachado: vai para o atendente', () => {
 
     expect(result.step).toBe('closed');
     expect(result.events).toEqual([
-      { type: 'handoff', reason: 'cancelamento ou reclamação após despacho' },
+      { type: 'handoff', reason: 'cancelamento após despacho' },
     ]);
     expect(fakeSale()?.status).not.toBe('CANCEL');
   });
@@ -276,9 +276,7 @@ describe('entregue: sem cancelamento, reclamação vai ao atendente', () => {
     const result = await runTurn(sale, said({ intent: 'complaint' }), ctx);
 
     expect(result.step).toBe('closed');
-    expect(result.events).toEqual([
-      { type: 'handoff', reason: 'reclamação após entrega' },
-    ]);
+    expect(result.events).toEqual([{ type: 'handoff', reason: 'reclamação' }]);
   });
 
   it('trocar produto ou endereço depois da entrega também é recusado', async () => {

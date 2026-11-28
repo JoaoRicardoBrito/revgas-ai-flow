@@ -1,3 +1,4 @@
+import { describeHours, isOpen } from '../attendant/business-hours.js';
 import type { ExtractionResult } from '../llm/message-extractor.js';
 import { RevgasError } from '../revgas/revgas.errors.js';
 import type {
@@ -50,6 +51,8 @@ export async function runTurn(
   let current = state;
   if (signal.intent === 'human' && state.step !== 'closed') {
     result = handoff(state.draft, 'cliente pediu atendente');
+  } else if (signal.intent === 'complaint' && state.step !== 'closed') {
+    result = handoff(state.draft, 'reclamação');
   } else {
     try {
       // Depois da venda, o estado real do pedido está na RevGás (issue #12).
@@ -60,7 +63,10 @@ export async function runTurn(
       }
       current = synced.state;
       assertTransition(state.step, current.step);
-      result = await handlers[current.step](current, signal, ctx);
+      result = resetMisunderstandings(
+        current,
+        await handlers[current.step](current, signal, ctx),
+      );
     } catch (error) {
       if (!(error instanceof RevgasError)) throw error;
       // RevGás fora: não perde a conversa nem o rascunho (PRD seção 7).
@@ -70,7 +76,34 @@ export async function runTurn(
   }
 
   assertTransition(current.step, result.step);
-  return { ...result, replies: result.replies.map(present) };
+  const replies = afterHoursReplies(result, ctx) ?? result.replies;
+  return { ...result, replies: replies.map(present) };
+}
+
+/** As falhas de entendimento só contam quando são seguidas. */
+function resetMisunderstandings(
+  before: SessionState,
+  result: TurnOutcome,
+): TurnOutcome {
+  const count = result.draft.misunderstandings;
+  if (result.step === 'closed' || count === 0) return result;
+  if (count > before.draft.misunderstandings) return result;
+  return { ...result, draft: { ...result.draft, misunderstandings: 0 } };
+}
+
+/** Passagem fora do horário: informa o horário e registra o pedido. */
+function afterHoursReplies(
+  result: TurnOutcome,
+  ctx: TurnContext,
+): Reply[] | null {
+  const hours = ctx.settings?.businessHours;
+  if (!hours || !result.events.some((e) => e.type === 'handoff')) return null;
+  if (isOpen(hours, ctx.now ?? new Date())) return null;
+  return [
+    {
+      text: `Nosso atendimento está fechado agora. Funciona ${describeHours(hours)}. Seu pedido de atendimento foi registrado com o que você me disse.`,
+    },
+  ];
 }
 
 /** Etapas em que o pedido pode mudar de estado fora da conversa. */
@@ -172,6 +205,13 @@ const BUTTON_INTENTS: Readonly<Record<string, Signal['intent']>> = {
   'sale_change:keep': 'deny',
 };
 
+/**
+ * Sem LLM, o código ainda reconhece o pedido de atendente: o cliente pode
+ * pedir a qualquer momento (issue #13).
+ */
+const ASKS_FOR_HUMAN =
+  /\batendente\b|\bfalar com (um |uma )?(pessoa|humano|algu[eé]m)/i;
+
 /** Toque em botão: vira intenção direto, sem passar pelo LLM. */
 export function signalFromButton(buttonId: string): Signal {
   const [prefix = ''] = buttonId.split(':');
@@ -204,7 +244,7 @@ export function signalFromExtraction(
     };
   }
   return {
-    intent: 'unknown',
+    intent: ASKS_FOR_HUMAN.test(text ?? '') ? 'human' : 'unknown',
     extraction: null,
     button: null,
     llmUnavailable: result.reason !== 'empty_message',

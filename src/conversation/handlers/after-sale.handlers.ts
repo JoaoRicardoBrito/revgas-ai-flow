@@ -1,5 +1,11 @@
+import type { Signal } from '../conversation.types.js';
 import { RevgasError } from '../../revgas/revgas.errors.js';
-import { handoff, outcome, type StepHandler } from './handler.js';
+import {
+  handoff,
+  misunderstood,
+  outcome,
+  type StepHandler,
+} from './handler.js';
 import { answerCancelMotive, askCancelMotive } from './sale-cancel.js';
 import { applyChange, proposeChange, wantsChange } from './sale-change.js';
 
@@ -77,22 +83,25 @@ export const saleCreatedHandler: StepHandler = async (state, signal, ctx) => {
   if (signal.intent === 'cancel' && saleId !== null) {
     return askCancelMotive(draft, ctx);
   }
-  return outcome('sale_created', state.draft, [
-    {
-      text: `Seu pedido nº ${saleId ?? ''} já está registrado e logo sai para entrega.`,
-    },
-  ]);
+  const status = `Seu pedido nº ${saleId ?? ''} já está registrado e logo sai para entrega.`;
+  if (notUnderstood(signal)) {
+    return misunderstood(state, { text: status, buttons: [HUMAN_BUTTON] });
+  }
+  return outcome('sale_created', state.draft, [{ text: status }]);
 };
+
+const HUMAN_BUTTON = { id: 'human', label: 'Falar com atendente' };
+
+const notUnderstood = (signal: Signal) =>
+  signal.intent === 'unknown' || signal.intent === 'other';
 
 /**
  * Entregador a caminho (PRD 6.1): produto não muda; endereço e
  * cancelamento só com atendente, que combina com o entregador.
  */
 export const dispatchedHandler: StepHandler = (state, signal) => {
-  if (signal.intent === 'cancel' || signal.intent === 'complaint') {
-    return Promise.resolve(
-      handoff(state.draft, 'cancelamento ou reclamação após despacho'),
-    );
+  if (signal.intent === 'cancel') {
+    return Promise.resolve(handoff(state.draft, 'cancelamento após despacho'));
   }
   const x = signal.extraction;
   if (
@@ -118,6 +127,14 @@ export const dispatchedHandler: StepHandler = (state, signal) => {
       ]),
     );
   }
+  if (notUnderstood(signal)) {
+    return Promise.resolve(
+      misunderstood(state, {
+        text: 'Seu pedido já está a caminho!',
+        buttons: [HUMAN_BUTTON],
+      }),
+    );
+  }
   return Promise.resolve(
     outcome('dispatched', state.draft, [
       { text: 'Seu pedido já está a caminho!' },
@@ -130,15 +147,13 @@ export const closedHandler: StepHandler = (state) =>
   Promise.resolve(outcome('closed', state.draft, []));
 
 /**
- * Entregue (PRD 6.1): não cancela nem altera; reclamação vai ao atendente.
+ * Entregue (PRD 6.1): não cancela nem altera. Reclamação vai ao atendente
+ * pela regra global do `runTurn`, antes de chegar aqui.
  * Qualquer outra mensagem encerra a conversa, para a próxima abrir um
  * pedido novo em vez de ficar presa neste.
  */
 export const deliveredHandler: StepHandler = (state, signal) => {
   const x = signal.extraction;
-  if (signal.intent === 'complaint') {
-    return Promise.resolve(handoff(state.draft, 'reclamação após entrega'));
-  }
   const wantsToChange =
     signal.intent === 'cancel' ||
     signal.intent === 'change_product' ||

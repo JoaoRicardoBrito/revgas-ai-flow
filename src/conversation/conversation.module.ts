@@ -7,6 +7,7 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { parseBusinessHours } from '../attendant/business-hours.js';
 import { toLogSafe } from '../common/log-safe.js';
 import type { Env } from '../config/env.schema.js';
 import { ConversationStore } from '../database/conversation.store.js';
@@ -100,6 +101,11 @@ class SessionExpirer implements OnModuleInit, OnModuleDestroy {
           cpfRequired: config.get('CPF_REQUIRED', { infer: true }),
           // Pix fictício só com a RevGás simulada.
           pixDemo: config.get('REVGAS_USE_MOCK', { infer: true }),
+          businessHours: parseBusinessHours({
+            hours: config.get('BUSINESS_HOURS', { infer: true }),
+            days: config.get('BUSINESS_DAYS', { infer: true }),
+            timeZone: config.get('BUSINESS_TIMEZONE', { infer: true }),
+          }),
           coverage: parseCoverage({
             neighborhoods: config.get('COVERAGE_NEIGHBORHOODS', {
               infer: true,

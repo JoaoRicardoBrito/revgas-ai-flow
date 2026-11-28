@@ -1,7 +1,10 @@
+import { performance } from 'node:perf_hooks';
+import type { BusinessHours } from '../attendant/business-hours.js';
 import type {
   Channel,
   ConversationStore,
 } from '../database/conversation.store.js';
+import { measureRevgas } from '../metrics/revgas-timing.js';
 import { findCpf, isValidCpf, maskCpf } from '../common/cpf.js';
 import type { Conversation } from '../database/schema.js';
 import { EXPECTING, type MessageExtractor } from '../llm/message-extractor.js';
@@ -62,6 +65,10 @@ export interface ConversationServiceOptions {
   pixDemo?: boolean;
   /** Área de entrega da revenda. */
   coverage?: Coverage;
+  /** Relógio em ms para medir o turno. Trocável só em teste. */
+  clock?: () => number;
+  /** Horário do atendimento humano. */
+  businessHours?: BusinessHours;
 }
 
 /**
@@ -111,6 +118,8 @@ export class ConversationService {
 
   private async process(message: IncomingMessage): Promise<HandleResult> {
     const { channel, contact, at } = message;
+    const clock = this.options.clock ?? (() => performance.now());
+    const started = clock();
     const since = new Date(at.getTime() - this.options.ttlMs);
 
     // Com atendente: só registra a mensagem, sem responder (issue #13).
@@ -187,17 +196,25 @@ export class ConversationService {
       signal = signalFromExtraction(extraction, text);
     }
 
-    const result = await runTurn(state, signal, {
-      revgas: this.revgas,
-      catalog: this.catalog,
-      contact,
-      settings: {
-        cpfRequired: this.options.cpfRequired ?? false,
-        pixDemo: this.options.pixDemo ?? false,
-        coverage: this.options.coverage,
-      },
-    });
-    await this.persist(conversation, result, at);
+    const { result, revgasMs } = await measureRevgas(() =>
+      runTurn(state, signal, {
+        revgas: this.revgas,
+        catalog: this.catalog,
+        contact,
+        now: at,
+        settings: {
+          cpfRequired: this.options.cpfRequired ?? false,
+          pixDemo: this.options.pixDemo ?? false,
+          coverage: this.options.coverage,
+          businessHours: this.options.businessHours,
+        },
+      }),
+    );
+    // Antes de gravar a venda: depois dela o tempo não acumula mais.
+    await this.store.addRevgasTime(conversation.id, revgasMs);
+    // A venda foi criada ao fim do turno, não quando a mensagem chegou.
+    const saleAt = new Date(at.getTime() + Math.round(clock() - started));
+    await this.persist(conversation, result, at, saleAt);
 
     return {
       conversationId: conversation.id,
@@ -212,6 +229,7 @@ export class ConversationService {
     conversation: Conversation,
     result: TurnOutcome,
     at: Date,
+    saleAt: Date = at,
   ) {
     const id = conversation.id;
     await this.store.saveState(
@@ -227,7 +245,7 @@ export class ConversationService {
     for (const event of result.events) {
       switch (event.type) {
         case 'sale_created':
-          await this.store.markSaleCreated(id, event.saleId, at);
+          await this.store.markSaleCreated(id, event.saleId, saleAt);
           break;
         case 'sale_canceled':
           await this.store.markCanceled(id, at, event.reason);
